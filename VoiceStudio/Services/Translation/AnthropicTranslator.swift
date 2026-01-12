@@ -1,5 +1,30 @@
 import Foundation
 
+// #region agent log
+private func appendLog(location: String, message: String, data: [String: Any], hypothesisId: String) {
+    let logPath = "/Users/xiaochunliu/program/voice-buddy/.cursor/debug.log"
+    let entry: [String: Any] = [
+        "timestamp": Date().timeIntervalSince1970 * 1000,
+        "location": location,
+        "message": message,
+        "data": data,
+        "sessionId": "debug-session",
+        "hypothesisId": hypothesisId
+    ]
+    if let jsonData = try? JSONSerialization.data(withJSONObject: entry),
+       let jsonString = String(data: jsonData, encoding: .utf8) {
+        let line = jsonString + "\n"
+        if let handle = FileHandle(forWritingAtPath: logPath) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
+        }
+    }
+}
+// #endregion
+
 final class AnthropicTranslator: TranslationService {
     
     private let apiKey: String
@@ -12,6 +37,9 @@ final class AnthropicTranslator: TranslationService {
         self.model = model
         self.endpoint = URL(string: TranslationProvider.anthropic.apiEndpoint)!
         self.session = URLSession.shared
+        // #region agent log
+        appendLog(location: "AnthropicTranslator.swift:init", message: "Initialized with API key", data: ["keyLength": apiKey.count, "prefix": String(apiKey.prefix(10)), "model": model], hypothesisId: "D")
+        // #endregion
     }
     
     func translate(text: String, to targetLanguage: String) async throws -> String {

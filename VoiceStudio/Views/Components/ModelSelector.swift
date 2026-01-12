@@ -2,102 +2,63 @@ import SwiftUI
 
 struct ModelSelector: View {
     
-    @Binding var selectedModel: WhisperModel
+    @Environment(\.openSettings) private var openSettings
+    var selectedModel: WhisperModel
     @State var modelManager: ModelManager
+    @State private var isHovering = false
+    
+    private var isAvailable: Bool {
+        modelManager.status(for: selectedModel) == .downloaded
+    }
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Text("Model:")
                 .foregroundColor(AppConstants.Color.secondaryText)
             
-            Picker("", selection: $selectedModel) {
-                ForEach(WhisperModel.allCases) { model in
-                    Text(model.displayName).tag(model)
-                }
-            }
-            .frame(width: 160)
+            Text(selectedModel.displayName)
+                .foregroundColor(AppConstants.Color.primaryText)
             
-            modelStatusView
+            statusIndicator
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovering ? AppConstants.Color.secondaryBackground : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .onTapGesture {
+            openRecognitionSettings()
+        }
+        .help("Click to manage models")
     }
     
     @ViewBuilder
-    private var modelStatusView: some View {
-        let status = modelManager.status(for: selectedModel)
-        
-        switch status {
-        case .notDownloaded:
-            notDownloadedView
-            
-        case .downloading(let progress):
-            downloadingView(progress: progress)
-            
-        case .downloaded:
-            downloadedView
-        }
-    }
-    
-    private var notDownloadedView: some View {
-        HStack {
-            if let error = modelManager.downloadErrors[selectedModel] {
-                errorView(error: error)
-            } else {
-                Button {
-                    modelManager.startDownload(selectedModel)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                        Text("Download (\(selectedModel.downloadSize))")
-                    }
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-    }
-    
-    private func errorView(error: Error) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-            Text("Failed")
-                .foregroundColor(.orange)
-                .font(.caption)
-            Button("Retry") {
-                modelManager.clearError(for: selectedModel)
-                modelManager.startDownload(selectedModel)
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-        }
-    }
-    
-    private func downloadingView(progress: Double) -> some View {
-        HStack(spacing: 8) {
-            ProgressView(value: progress)
-                .frame(width: 80)
-            
-            Text("\(Int(progress * 100))%")
-                .font(.caption)
-                .monospacedDigit()
-                .frame(width: 36, alignment: .trailing)
-            
-            Button {
-                modelManager.cancelDownload(selectedModel)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
+    private var statusIndicator: some View {
+        if isAvailable {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(AppConstants.Color.successGreen)
+                Text("Ready")
                     .foregroundColor(AppConstants.Color.secondaryText)
             }
-            .buttonStyle(.borderless)
+        } else {
+            HStack(spacing: 4) {
+                Image(systemName: "circle")
+                    .foregroundColor(AppConstants.Color.secondaryText)
+                Text("Unavailable")
+                    .foregroundColor(AppConstants.Color.secondaryText)
+            }
         }
     }
     
-    private var downloadedView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(AppConstants.Color.successGreen)
-            Text("Ready")
-                .foregroundColor(AppConstants.Color.secondaryText)
-        }
+    private func openRecognitionSettings() {
+        NotificationCenter.default.post(name: .openRecognitionSettings, object: nil)
+        openSettings()
     }
 }
 
@@ -185,6 +146,17 @@ struct ModelSelectorCompact: View {
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
+                
+            case .incomplete:
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    Button("Repair Download") {
+                        modelManager.repairDownload(selectedModel)
+                    }
+                    .font(.caption)
+                }
             }
         }
     }
@@ -194,7 +166,7 @@ struct ModelSelectorCompact: View {
     @Previewable @State var model: WhisperModel = .largeTurbo
     
     VStack(spacing: 40) {
-        ModelSelector(selectedModel: $model, modelManager: ModelManager())
+        ModelSelector(selectedModel: model, modelManager: ModelManager())
         
         Divider()
         

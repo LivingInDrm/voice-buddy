@@ -55,34 +55,4 @@ struct PermissionHelper {
             NSWorkspace.shared.open(url)
         }
     }
-    
-    @MainActor
-    static func showMicrophonePermissionAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Microphone Access Required"
-        alert.informativeText = "Voice Studio needs microphone access to transcribe your speech. Please grant permission in System Settings."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Later")
-        
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openMicrophoneSettings()
-        }
-    }
-    
-    @MainActor
-    static func showAccessibilityPermissionAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Accessibility Access Required"
-        alert.informativeText = "Voice Studio needs accessibility access for global hotkeys. Please grant permission in System Settings."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Later")
-        
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            openAccessibilitySettings()
-        }
-    }
 }

@@ -5,8 +5,6 @@ struct RecordButton: View {
     let state: RecordingState
     let action: () -> Void
     
-    @State private var isPulsing = false
-    
     private var isRecording: Bool {
         state.isRecording
     }
@@ -18,10 +16,6 @@ struct RecordButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                if isRecording {
-                    pulsingBackground
-                }
-                
                 Circle()
                     .fill(buttonColor)
                     .frame(
@@ -35,30 +29,26 @@ struct RecordButton: View {
                 
                 buttonIcon
             }
+            .background(isRecording ? pulsingBackground : nil)
         }
         .buttonStyle(.plain)
         .disabled(isProcessing)
-        .onChange(of: isRecording) { _, recording in
-            if recording {
-                withAnimation(.easeInOut(duration: AppConstants.Animation.buttonPulse).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            } else {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    isPulsing = false
-                }
-            }
-        }
     }
     
     private var pulsingBackground: some View {
         Circle()
             .fill(AppConstants.Color.recordingRed.opacity(0.3))
             .frame(
-                width: AppConstants.Layout.recordButtonSize + (isPulsing ? 30 : 10),
-                height: AppConstants.Layout.recordButtonSize + (isPulsing ? 30 : 10)
+                width: AppConstants.Layout.recordButtonSize + 30,
+                height: AppConstants.Layout.recordButtonSize + 30
             )
             .blur(radius: 10)
+            .phaseAnimator([false, true]) { content, phase in
+                content
+                    .scaleEffect(phase ? 1.0 : 0.85)
+            } animation: { _ in
+                .easeInOut(duration: AppConstants.Animation.buttonPulse)
+            }
     }
     
     private var buttonColor: Color {

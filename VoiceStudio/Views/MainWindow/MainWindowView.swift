@@ -2,20 +2,22 @@ import SwiftUI
 
 struct MainWindowView: View {
     
-    @State var appState: AppState
-    @State private var isTranslationExpanded = true
+    @Bindable var appState: AppState
     
     var body: some View {
         VStack(spacing: 0) {
-            recordingSection
+            // 顶部工具栏
+            topToolbar
             
             Divider()
             
+            // 主内容区域：转录 + 翻译面板
             panelsSection
             
             Divider()
             
-            bottomStatusBar
+            // 底部录音区域：波形 + 麦克风按钮
+            recordingSection
         }
         .frame(
             minWidth: AppConstants.Layout.windowMinWidth,
@@ -53,125 +55,93 @@ struct MainWindowView: View {
                 Text(suggestion)
             }
         }
+        .onAppear {
+            Task {
+                await appState.preloadModelIfNeeded()
+            }
+        }
+        .permissionAlerts(
+            showMicrophoneAlert: Binding(
+                get: { appState.showMicrophonePermissionAlert },
+                set: { appState.showMicrophonePermissionAlert = $0 }
+            ),
+            showAccessibilityAlert: Binding(
+                get: { appState.showAccessibilityPermissionAlert },
+                set: { appState.showAccessibilityPermissionAlert = $0 }
+            )
+        )
     }
     
-    private var recordingSection: some View {
-        VStack(spacing: AppConstants.Layout.standardPadding) {
-            WaveformViewCentered(
-                audioLevel: appState.audioLevel,
-                isRecording: appState.recordingState.isRecording
-            )
-            .padding(.horizontal)
-            .padding(.top, AppConstants.Layout.standardPadding)
+    // MARK: - 顶部工具栏
+    private var topToolbar: some View {
+        HStack {
+            Toggle("Translate to English", isOn: $appState.settingsManager.translationEnabled)
+                .toggleStyle(.checkbox)
+                .font(.subheadline)
             
+            Spacer()
+            
+            SettingsLink {
+                Image(systemName: "gear")
+            }
+            .buttonStyle(.borderless)
+            
+            Button("Clear") {
+                appState.clear()
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.transcriptionText.isEmpty && appState.translationText.isEmpty)
+        }
+        .padding(.horizontal, AppConstants.Layout.standardPadding)
+        .padding(.vertical, AppConstants.Layout.smallPadding)
+        .background(AppConstants.Color.secondaryBackground.opacity(0.3))
+    }
+    
+    // MARK: - 主面板区域（转录 + 翻译）
+    private var panelsSection: some View {
+        VStack(spacing: AppConstants.Layout.standardPadding) {
+            // 转录面板 - 占据更多空间
+            TranscriptionPanel(text: appState.transcriptionText)
+                .frame(minHeight: 120)
+            
+            // 翻译面板 - 较小空间
+            if appState.settingsManager.translationEnabled {
+                TranslationPanel(text: appState.translationText)
+            }
+        }
+        .padding(AppConstants.Layout.standardPadding)
+    }
+    
+    // MARK: - 底部录音区域
+    private var recordingSection: some View {
+        HStack(spacing: 0) {
+            // 左侧波形
+            WaveformSideView(
+                audioLevel: appState.audioLevel,
+                isRecording: appState.recordingState.isRecording,
+                direction: .left
+            )
+            .frame(maxWidth: .infinity)
+            
+            // 中央录音按钮
             RecordButton(state: appState.recordingState) {
                 Task {
                     await toggleRecording()
                 }
             }
+            .padding(.horizontal, AppConstants.Layout.standardPadding)
             
-            VStack(spacing: 4) {
-                StatusLabel(state: appState.recordingState)
-                
-                Text("Press and hold Command+Shift+V")
-                    .font(.caption)
-                    .foregroundColor(AppConstants.Color.secondaryText)
-            }
-            .padding(.bottom, AppConstants.Layout.standardPadding)
+            // 右侧波形
+            WaveformSideView(
+                audioLevel: appState.audioLevel,
+                isRecording: appState.recordingState.isRecording,
+                direction: .right
+            )
+            .frame(maxWidth: .infinity)
         }
-    }
-    
-    private var panelsSection: some View {
-        ScrollView {
-            VStack(spacing: AppConstants.Layout.standardPadding) {
-                TranscriptionPanel(text: appState.transcriptionText)
-                
-                if appState.isTranslationEnabled {
-                    TranslationPanel(
-                        text: appState.translationText,
-                        isExpanded: $isTranslationExpanded
-                    )
-                }
-            }
-            .padding(AppConstants.Layout.standardPadding)
-        }
-    }
-    
-    private var bottomStatusBar: some View {
-        VStack(spacing: AppConstants.Layout.smallPadding) {
-            HStack {
-                Toggle("Translate to English", isOn: Binding(
-                    get: { appState.isTranslationEnabled },
-                    set: { appState.isTranslationEnabled = $0 }
-                ))
-                .toggleStyle(.checkbox)
-                .font(.subheadline)
-                
-                Spacer()
-                
-                ModelSelector(
-                    selectedModel: Binding(
-                        get: { appState.selectedModel },
-                        set: { appState.selectedModel = $0 }
-                    ),
-                    modelManager: appState.modelManager
-                )
-            }
-            
-            downloadProgressView
-            
-            HStack {
-                if !appState.performanceText.isEmpty {
-                    Text(appState.performanceText)
-                        .font(.caption)
-                        .foregroundColor(AppConstants.Color.secondaryText)
-                        .monospacedDigit()
-                }
-                
-                Spacer()
-                
-                Button("Clear") {
-                    appState.clear()
-                }
-                .buttonStyle(.borderless)
-                .disabled(appState.transcriptionText.isEmpty && appState.translationText.isEmpty)
-            }
-        }
-        .padding(AppConstants.Layout.standardPadding)
-        .background(AppConstants.Color.secondaryBackground.opacity(0.5))
-    }
-    
-    @ViewBuilder
-    private var downloadProgressView: some View {
-        let downloadingModels = appState.modelManager.downloadProgress.keys
-        
-        ForEach(Array(downloadingModels), id: \.self) { model in
-            if let progress = appState.modelManager.downloadProgress[model] {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.down.circle")
-                        .foregroundColor(AppConstants.Color.accentBlue)
-                    
-                    Text("Downloading \(model.displayName):")
-                        .font(.caption)
-                    
-                    ProgressView(value: progress)
-                        .frame(maxWidth: 150)
-                    
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption)
-                        .monospacedDigit()
-                        .frame(width: 36)
-                    
-                    Button {
-                        appState.modelManager.cancelDownload(model)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(AppConstants.Color.secondaryText)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-        }
+        .padding(.horizontal, AppConstants.Layout.standardPadding)
+        .padding(.vertical, AppConstants.Layout.standardPadding)
+        .background(AppConstants.Color.secondaryBackground.opacity(0.3))
     }
     
     private func toggleRecording() async {

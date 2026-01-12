@@ -6,21 +6,14 @@ struct TranscriptionPanel: View {
     var placeholder: String = "Transcription will appear here..."
     
     var body: some View {
-        VStack(alignment: .leading, spacing: AppConstants.Layout.smallPadding) {
-            HStack {
-                Text("TRANSCRIPTION")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(AppConstants.Color.secondaryText)
-                
-                Spacer()
-                
-                CopyButton(text: text, showLabel: true)
-            }
-            
+        ZStack(alignment: .topTrailing) {
             textContent
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(AppConstants.Layout.standardPadding)
+            
+            CopyButton(text: text, showLabel: false)
+                .padding(AppConstants.Layout.smallPadding)
         }
-        .padding(AppConstants.Layout.standardPadding)
         .background(
             RoundedRectangle(cornerRadius: AppConstants.Layout.panelCornerRadius)
                 .fill(AppConstants.Color.secondaryBackground)

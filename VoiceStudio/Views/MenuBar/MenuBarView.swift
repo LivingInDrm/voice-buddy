@@ -22,7 +22,6 @@ struct MenuBarView: View {
             Divider()
                 .padding(.vertical, 4)
             
-            settingsButton
             openMainWindowButton
             
             Divider()
@@ -94,23 +93,6 @@ struct MenuBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(appState.transcriptionText.isEmpty)
-    }
-    
-    private var settingsButton: some View {
-        Button {
-            if #available(macOS 14.0, *) {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            } else {
-                NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-            }
-        } label: {
-            HStack {
-                Image(systemName: "gear")
-                Text("Settings...")
-                Spacer()
-            }
-        }
-        .buttonStyle(.plain)
     }
     
     private var openMainWindowButton: some View {

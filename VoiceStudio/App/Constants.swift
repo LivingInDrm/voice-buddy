@@ -3,6 +3,7 @@ import SwiftUI
 extension Notification.Name {
     static let showMainWindow = Notification.Name("showMainWindow")
     static let copyLastResult = Notification.Name("copyLastResult")
+    static let openRecognitionSettings = Notification.Name("openRecognitionSettings")
 }
 
 enum AppConstants {

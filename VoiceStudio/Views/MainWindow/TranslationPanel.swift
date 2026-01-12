@@ -3,53 +3,21 @@ import SwiftUI
 struct TranslationPanel: View {
     
     let text: String
-    @Binding var isExpanded: Bool
     var placeholder: String = "Translation will appear here..."
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            headerView
+        ZStack(alignment: .topTrailing) {
+            textContent
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(AppConstants.Layout.standardPadding)
             
-            if isExpanded {
-                Divider()
-                    .padding(.horizontal, AppConstants.Layout.standardPadding)
-                
-                textContent
-                    .padding(AppConstants.Layout.standardPadding)
-            }
+            CopyButton(text: text, showLabel: false)
+                .padding(AppConstants.Layout.smallPadding)
         }
         .background(
             RoundedRectangle(cornerRadius: AppConstants.Layout.panelCornerRadius)
                 .fill(AppConstants.Color.secondaryBackground)
         )
-        .animation(.spring(duration: AppConstants.Animation.panelExpand), value: isExpanded)
-    }
-    
-    private var headerView: some View {
-        HStack {
-            Button {
-                isExpanded.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    
-                    Text("TRANSLATION")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                }
-                .foregroundColor(AppConstants.Color.secondaryText)
-            }
-            .buttonStyle(.plain)
-            
-            Spacer()
-            
-            if isExpanded {
-                CopyButton(text: text, showLabel: true)
-            }
-        }
-        .padding(AppConstants.Layout.standardPadding)
     }
     
     @ViewBuilder
@@ -120,17 +88,12 @@ struct TranslationPanelSimple: View {
 }
 
 #Preview {
-    @Previewable @State var isExpanded = true
-    
     VStack(spacing: 20) {
-        TranslationPanel(text: "", isExpanded: $isExpanded)
+        TranslationPanel(text: "")
         
         TranslationPanel(
-            text: "Hello, this is a test translation. Voice Studio is a native macOS voice assistant app.",
-            isExpanded: .constant(true)
+            text: "Hello, this is a test translation. Voice Studio is a native macOS voice assistant app."
         )
-        
-        TranslationPanel(text: "Collapsed panel", isExpanded: .constant(false))
     }
     .padding()
     .frame(width: 400)

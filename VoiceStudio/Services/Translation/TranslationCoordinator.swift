@@ -1,5 +1,30 @@
 import Foundation
 
+// #region agent log
+private func appendLog(location: String, message: String, data: [String: Any], hypothesisId: String) {
+    let logPath = "/Users/xiaochunliu/program/voice-buddy/.cursor/debug.log"
+    let entry: [String: Any] = [
+        "timestamp": Date().timeIntervalSince1970 * 1000,
+        "location": location,
+        "message": message,
+        "data": data,
+        "sessionId": "debug-session",
+        "hypothesisId": hypothesisId
+    ]
+    if let jsonData = try? JSONSerialization.data(withJSONObject: entry),
+       let jsonString = String(data: jsonData, encoding: .utf8) {
+        let line = jsonString + "\n"
+        if let handle = FileHandle(forWritingAtPath: logPath) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
+        }
+    }
+}
+// #endregion
+
 @MainActor
 @Observable
 final class TranslationCoordinator {
@@ -45,6 +70,10 @@ final class TranslationCoordinator {
     }
     
     private func getApiKey(for provider: TranslationProvider) throws -> String {
+        // #region agent log
+        appendLog(location: "TranslationCoordinator.swift:getApiKey", message: "Getting API key", data: ["provider": provider.rawValue], hypothesisId: "E")
+        // #endregion
+        
         let keychainKey: String
         switch provider {
         case .openai:
@@ -53,12 +82,27 @@ final class TranslationCoordinator {
             keychainKey = KeychainKey.anthropicApiKey
         }
         
-        guard let apiKey = try KeychainManager.load(key: keychainKey),
-              !apiKey.isEmpty else {
+        let apiKey: String?
+        do {
+            apiKey = try KeychainManager.load(key: keychainKey)
+            // #region agent log
+            appendLog(location: "TranslationCoordinator.swift:getApiKey", message: "Loaded from keychain", data: ["keychainKey": keychainKey, "keyLength": apiKey?.count ?? 0, "prefix": String((apiKey ?? "").prefix(10))], hypothesisId: "D")
+            // #endregion
+        } catch {
+            // #region agent log
+            appendLog(location: "TranslationCoordinator.swift:getApiKey", message: "Load FAILED", data: ["error": error.localizedDescription], hypothesisId: "D")
+            // #endregion
+            throw TranslationError.networkError(error)
+        }
+        
+        guard let key = apiKey, !key.isEmpty else {
+            // #region agent log
+            appendLog(location: "TranslationCoordinator.swift:getApiKey", message: "API key missing or empty", data: [:], hypothesisId: "D")
+            // #endregion
             throw TranslationError.apiKeyMissing
         }
         
-        return apiKey
+        return key
     }
     
     private func createTranslator(provider: TranslationProvider, apiKey: String) -> TranslationService {

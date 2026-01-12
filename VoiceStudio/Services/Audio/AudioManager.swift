@@ -1,6 +1,24 @@
 import AVFoundation
 import Foundation
 
+actor AudioBufferStorage {
+    private var buffer: [Float] = []
+    
+    func append(contentsOf samples: [Float]) {
+        buffer.append(contentsOf: samples)
+    }
+    
+    func drain() -> [Float] {
+        let result = buffer
+        buffer.removeAll()
+        return result
+    }
+    
+    func clear() {
+        buffer.removeAll()
+    }
+}
+
 enum AudioError: LocalizedError {
     case converterCreationFailed
     case engineStartFailed
@@ -26,7 +44,7 @@ final class AudioManager {
     
     private let audioEngine = AVAudioEngine()
     private var audioConverter: AVAudioConverter?
-    private var audioBuffer: [Float] = []
+    private let bufferStorage = AudioBufferStorage()
     private var isRecording = false
     
     private let targetFormat = AVAudioFormat(
@@ -40,7 +58,7 @@ final class AudioManager {
     
     init() {}
     
-    func startRecording() throws {
+    func startRecording() async throws {
         guard !isRecording else { return }
         
         let inputNode = audioEngine.inputNode
@@ -54,7 +72,7 @@ final class AudioManager {
             throw AudioError.converterCreationFailed
         }
         self.audioConverter = converter
-        self.audioBuffer.removeAll()
+        await bufferStorage.clear()
         
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer)
@@ -69,16 +87,16 @@ final class AudioManager {
         }
     }
     
-    func stopRecording() -> [Float] {
+    func stopRecording() async -> [Float] {
         guard isRecording else { return [] }
         
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
         isRecording = false
         
-        let result = audioBuffer
-        audioBuffer.removeAll()
-        return result
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        
+        return await bufferStorage.drain()
     }
     
     private func processAudioBuffer(_ inputBuffer: AVAudioPCMBuffer) {
@@ -114,9 +132,12 @@ final class AudioManager {
         let rms = Self.calculateRMS(floatData, frameCount: frameLength)
         let samples = Array(UnsafeBufferPointer(start: floatData, count: frameLength))
         
+        Task { [weak self] in
+            await self?.bufferStorage.append(contentsOf: samples)
+        }
+        
         Task { @MainActor [weak self] in
             self?.onAudioLevelUpdate?(rms)
-            self?.audioBuffer.append(contentsOf: samples)
         }
     }
     

@@ -4,35 +4,38 @@ import SwiftUI
 @Observable
 final class AppState {
     
+    // MARK: - Recording State
+    
     var recordingState: RecordingState = .idle
     var transcriptionText: String = ""
     var translationText: String = ""
     var audioLevel: Float = 0
+    var isPreloadingModel: Bool = false
+    
+    // MARK: - Alerts & Errors
     
     var currentToast: ToastItem?
     var showErrorAlert = false
     var currentError: VoiceStudioError?
+    var showMicrophonePermissionAlert = false
+    var showAccessibilityPermissionAlert = false
+    
+    // MARK: - Results
     
     var lastTranscriptionResult: TranscriptionResult?
     var lastTranslationResult: TranslationResult?
     
-    let settingsManager = SettingsManager()
+    // MARK: - Services
     
-    var selectedModel: WhisperModel {
-        get { settingsManager.selectedModel }
-        set { settingsManager.selectedModel = newValue }
-    }
-    
-    var isTranslationEnabled: Bool {
-        get { settingsManager.translationEnabled }
-        set { settingsManager.translationEnabled = newValue }
-    }
+    var settingsManager = SettingsManager()
     
     let audioManager = AudioManager()
     let whisperService = WhisperService()
     let translationCoordinator = TranslationCoordinator()
     let hotkeyManager = HotkeyManager()
     let modelManager = ModelManager()
+    
+    // MARK: - Initialization
     
     init() {
         setupAudioLevelCallback()
@@ -57,17 +60,11 @@ final class AppState {
         
         switch error {
         case .microphonePermissionDenied:
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                NSWorkspace.shared.open(url)
-            }
+            PermissionHelper.openMicrophoneSettings()
         case .apiKeyMissing:
-            if #available(macOS 14.0, *) {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            } else {
-                NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-            }
+            NotificationCenter.default.post(name: .showMainWindow, object: nil)
         case .modelNotDownloaded:
-            modelManager.startDownload(selectedModel)
+            modelManager.startDownload(settingsManager.selectedModel)
         default:
             break
         }
@@ -108,7 +105,7 @@ final class AppState {
         }
         
         do {
-            try audioManager.startRecording()
+            try await audioManager.startRecording()
             recordingState = .recording
         } catch let error as AudioError {
             showError(.audioEngineError(error.localizedDescription))
@@ -122,7 +119,7 @@ final class AppState {
     func stopRecordingAndTranscribe() async {
         guard recordingState.isRecording else { return }
         
-        let audioData = audioManager.stopRecording()
+        let audioData = await audioManager.stopRecording()
         audioLevel = 0
         
         let audioDuration = Double(audioData.count) / AppConstants.Audio.sampleRate
@@ -223,6 +220,26 @@ final class AppState {
         lastTranscriptionResult = nil
         lastTranslationResult = nil
         audioLevel = 0
+    }
+    
+    func cleanup() {
+        whisperService.unloadModel()
+        hotkeyManager.removeHotkeys()
+        audioManager.onAudioLevelUpdate = nil
+    }
+    
+    func preloadModelIfNeeded() async {
+        let model = settingsManager.selectedModel
+        
+        guard !whisperService.isReady || whisperService.loadedModel != model else { return }
+        guard modelManager.status(for: model) == .downloaded else { return }
+        
+        isPreloadingModel = true
+        do {
+            try await whisperService.loadModel(model)
+        } catch {
+        }
+        isPreloadingModel = false
     }
     
     var performanceText: String {

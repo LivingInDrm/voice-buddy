@@ -1,36 +1,74 @@
 import SwiftUI
+import AppKit
+
+/// 使用 NSTextField/NSSecureTextField 包装，确保单行显示和一致的布局行为
+struct NativeTextField: NSViewRepresentable {
+    @Binding var text: String
+    let isSecure: Bool
+    
+    func makeNSView(context: Context) -> NSTextField {
+        let textField: NSTextField
+        if isSecure {
+            textField = NSSecureTextField()
+        } else {
+            textField = NSTextField()
+        }
+        configureTextField(textField)
+        textField.delegate = context.coordinator
+        return textField
+    }
+    
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+    
+    private func configureTextField(_ textField: NSTextField) {
+        textField.isBordered = false
+        textField.drawsBackground = false
+        textField.focusRingType = .none
+        textField.cell?.usesSingleLineMode = true
+        textField.cell?.wraps = false
+        textField.cell?.isScrollable = true
+        textField.lineBreakMode = .byTruncatingTail
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: NativeTextField
+        
+        init(_ parent: NativeTextField) {
+            self.parent = parent
+        }
+        
+        func controlTextDidChange(_ obj: Notification) {
+            if let textField = obj.object as? NSTextField {
+                parent.text = textField.stringValue
+            }
+        }
+    }
+}
 
 struct SecureTextField: View {
     
     @Binding var text: String
-    var placeholder: String = ""
     
     @State private var isSecure = true
     @FocusState private var isFocused: Bool
     
+    private let fieldHeight: CGFloat = 22
+    
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack(alignment: .leading) {
-                if isSecure {
-                    SecureField(placeholder, text: $text)
-                        .textFieldStyle(.plain)
-                        .focused($isFocused)
-                } else {
-                    TextField(placeholder, text: $text)
-                        .textFieldStyle(.plain)
-                        .focused($isFocused)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(AppConstants.Color.secondaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isFocused ? Color.accentColor : Color.clear, lineWidth: 1)
-            )
+        HStack(spacing: 4) {
+            // 使用统一的 NativeTextField，根据 isSecure 状态切换显示
+            // 使用 id 强制在 isSecure 改变时重新创建视图
+            NativeTextField(text: $text, isSecure: isSecure)
+                .id(isSecure)
+                .focused($isFocused)
             
             Button {
                 isSecure.toggle()
@@ -42,6 +80,14 @@ struct SecureTextField: View {
             .buttonStyle(.borderless)
             .help(isSecure ? "Show" : "Hide")
         }
+        .frame(height: fieldHeight)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .strokeBorder(isFocused ? Color.accentColor : Color.gray.opacity(0.4), lineWidth: isFocused ? 2 : 1)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .textBackgroundColor)))
+        )
     }
 }
 
@@ -49,7 +95,6 @@ struct LabeledSecureTextField: View {
     
     let label: String
     @Binding var text: String
-    var placeholder: String = "Enter API Key"
     var helpText: String? = nil
     
     var body: some View {
@@ -58,7 +103,7 @@ struct LabeledSecureTextField: View {
                 .font(.subheadline)
                 .foregroundColor(AppConstants.Color.secondaryText)
             
-            SecureTextField(text: $text, placeholder: placeholder)
+            SecureTextField(text: $text)
             
             if let helpText = helpText {
                 Text(helpText)
@@ -74,7 +119,7 @@ struct LabeledSecureTextField: View {
     @Previewable @State var filledKey = "sk-1234567890abcdef"
     
     VStack(spacing: 30) {
-        SecureTextField(text: $apiKey, placeholder: "Enter your API key")
+        SecureTextField(text: $apiKey)
         
         Divider()
         

@@ -48,8 +48,6 @@ final class WhisperService {
     private var whisperKit: WhisperKit?
     private var config: TranscriptionConfig = .default
     
-    private let modelRepo = "argmaxinc/whisperkit-coreml"
-    
     init() {}
     
     var isReady: Bool {
@@ -63,7 +61,7 @@ final class WhisperService {
     func loadModel(_ model: WhisperModel) async throws {
         guard state != .loading else { return }
         
-        guard isModelDownloaded(model) else {
+        guard ModelPathResolver.isModelDownloaded(model) else {
             state = .error("Model not downloaded")
             throw WhisperServiceError.modelNotDownloaded
         }
@@ -71,8 +69,10 @@ final class WhisperService {
         state = .loading
         
         do {
+            let modelFolder = ModelPathResolver.modelDirectory(for: model)
+            
             let whisper = try await WhisperKit(
-                model: model.id,
+                modelFolder: modelFolder.path,
                 verbose: false,
                 prewarm: true
             )
@@ -84,35 +84,6 @@ final class WhisperService {
             self.state = .error(error.localizedDescription)
             throw WhisperServiceError.modelLoadFailed(error.localizedDescription)
         }
-    }
-    
-    private func isModelDownloaded(_ model: WhisperModel) -> Bool {
-        let fileManager = FileManager.default
-        let homeDir = fileManager.homeDirectoryForCurrentUser
-        
-        let hubCacheDir = homeDir
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("huggingface")
-            .appendingPathComponent("hub")
-        
-        let repoId = modelRepo.replacingOccurrences(of: "/", with: "--")
-        let modelCacheDir = hubCacheDir.appendingPathComponent("models--\(repoId)")
-        
-        guard fileManager.fileExists(atPath: modelCacheDir.path) else {
-            return false
-        }
-        
-        let snapshotsDir = modelCacheDir.appendingPathComponent("snapshots")
-        guard let snapshots = try? fileManager.contentsOfDirectory(atPath: snapshotsDir.path),
-              let latestSnapshot = snapshots.first else {
-            return false
-        }
-        
-        let modelDir = snapshotsDir
-            .appendingPathComponent(latestSnapshot)
-            .appendingPathComponent(model.id)
-        
-        return fileManager.fileExists(atPath: modelDir.path)
     }
     
     func transcribe(audioData: [Float]) async throws -> TranscriptionResult {

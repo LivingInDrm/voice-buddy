@@ -16,6 +16,14 @@ struct TranslationSettingsView: View {
         ("de", "German")
     ]
     
+    private var openaiKeyIsSet: Bool {
+        !settingsManager.openaiApiKey.isEmpty
+    }
+    
+    private var anthropicKeyIsSet: Bool {
+        !settingsManager.anthropicApiKey.isEmpty
+    }
+    
     var body: some View {
         Form {
             Section {
@@ -44,21 +52,23 @@ struct TranslationSettingsView: View {
                     LabeledSecureTextField(
                         label: "OpenAI API Key",
                         text: $openaiKey,
-                        placeholder: "sk-...",
-                        helpText: "Get your key from platform.openai.com"
+                        helpText: openaiKeyIsSet ? "Key is set. Get your key from platform.openai.com" : "Get your key from platform.openai.com"
                     )
                     .onChange(of: openaiKey) { _, newValue in
-                        settingsManager.openaiApiKey = newValue
+                        if !newValue.isEmpty {
+                            settingsManager.openaiApiKey = newValue
+                        }
                     }
                     
                     LabeledSecureTextField(
                         label: "Anthropic API Key",
                         text: $anthropicKey,
-                        placeholder: "sk-ant-...",
-                        helpText: "Get your key from console.anthropic.com"
+                        helpText: anthropicKeyIsSet ? "Key is set. Get your key from console.anthropic.com" : "Get your key from console.anthropic.com"
                     )
                     .onChange(of: anthropicKey) { _, newValue in
-                        settingsManager.anthropicApiKey = newValue
+                        if !newValue.isEmpty {
+                            settingsManager.anthropicApiKey = newValue
+                        }
                     }
                 }
             } header: {
@@ -66,10 +76,6 @@ struct TranslationSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            openaiKey = settingsManager.openaiApiKey
-            anthropicKey = settingsManager.anthropicApiKey
-        }
     }
 }
 

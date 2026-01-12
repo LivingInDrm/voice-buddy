@@ -5,6 +5,7 @@ enum ModelDownloadStatus: Equatable {
     case notDownloaded
     case downloading(progress: Double)
     case downloaded
+    case incomplete
 }
 
 @MainActor
@@ -14,13 +15,13 @@ final class ModelManager {
     private var downloadTasks: [WhisperModel: Task<Void, Never>] = [:]
     private(set) var downloadProgress: [WhisperModel: Double] = [:]
     private(set) var downloadedModels: Set<WhisperModel> = []
+    private(set) var incompleteModels: Set<WhisperModel> = []
     private(set) var downloadErrors: [WhisperModel: Error] = [:]
     
-    private let modelRepo = "argmaxinc/whisperkit-coreml"
-    
     init() {
+        ModelPathResolver.ensureBaseDirectoryExists()
         Task {
-            await checkDownloadedModels()
+            await refreshModelStates()
         }
     }
     
@@ -31,11 +32,16 @@ final class ModelManager {
         if let progress = downloadProgress[model] {
             return .downloading(progress: progress)
         }
+        if incompleteModels.contains(model) {
+            return .incomplete
+        }
         return .notDownloaded
     }
     
     func startDownload(_ model: WhisperModel) {
         guard downloadTasks[model] == nil else { return }
+        
+        incompleteModels.remove(model)
         
         let task = Task { @MainActor in
             downloadProgress[model] = 0
@@ -50,15 +56,17 @@ final class ModelManager {
                 
                 let modelPath = try await downloadModel(model, progressCallback: progressCallback)
                 
+                downloadProgress.removeValue(forKey: model)
                 if modelPath != nil {
-                    downloadProgress.removeValue(forKey: model)
-                    downloadedModels.insert(model)
+                    await updateModelState(model)
                 }
             } catch is CancellationError {
                 downloadProgress.removeValue(forKey: model)
+                await updateModelState(model)
             } catch {
                 downloadProgress.removeValue(forKey: model)
                 downloadErrors[model] = error
+                await updateModelState(model)
             }
             
             downloadTasks.removeValue(forKey: model)
@@ -77,41 +85,47 @@ final class ModelManager {
         downloadErrors.removeValue(forKey: model)
     }
     
-    func checkDownloadedModels() async {
+    func repairDownload(_ model: WhisperModel) {
+        guard downloadTasks[model] == nil else { return }
+        incompleteModels.remove(model)
+        startDownload(model)
+    }
+    
+    func forceRedownload(_ model: WhisperModel) {
+        guard downloadTasks[model] == nil else { return }
+        ModelPathResolver.cleanIncompleteDownload(model)
+        incompleteModels.remove(model)
+        downloadedModels.remove(model)
+        startDownload(model)
+    }
+    
+    func deleteModel(_ model: WhisperModel) {
+        guard downloadTasks[model] == nil else { return }
+        ModelPathResolver.deleteModel(model)
+        downloadedModels.remove(model)
+        incompleteModels.remove(model)
+        downloadErrors.removeValue(forKey: model)
+    }
+    
+    func refreshModelStates() async {
         for model in WhisperModel.allCases {
-            if await isModelDownloaded(model) {
-                downloadedModels.insert(model)
-            }
+            await updateModelState(model)
         }
     }
     
-    private func isModelDownloaded(_ model: WhisperModel) async -> Bool {
-        let fileManager = FileManager.default
-        let homeDir = fileManager.homeDirectoryForCurrentUser
+    private func updateModelState(_ model: WhisperModel) async {
+        let validation = ModelPathResolver.validateModel(model)
         
-        let hubCacheDir = homeDir
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("huggingface")
-            .appendingPathComponent("hub")
-        
-        let repoId = modelRepo.replacingOccurrences(of: "/", with: "--")
-        let modelCacheDir = hubCacheDir.appendingPathComponent("models--\(repoId)")
-        
-        guard fileManager.fileExists(atPath: modelCacheDir.path) else {
-            return false
+        if validation.isComplete {
+            downloadedModels.insert(model)
+            incompleteModels.remove(model)
+        } else if validation.hasIncompleteDownload || validation.isPartiallyDownloaded {
+            downloadedModels.remove(model)
+            incompleteModels.insert(model)
+        } else {
+            downloadedModels.remove(model)
+            incompleteModels.remove(model)
         }
-        
-        let snapshotsDir = modelCacheDir.appendingPathComponent("snapshots")
-        guard let snapshots = try? fileManager.contentsOfDirectory(atPath: snapshotsDir.path),
-              let latestSnapshot = snapshots.first else {
-            return false
-        }
-        
-        let modelDir = snapshotsDir
-            .appendingPathComponent(latestSnapshot)
-            .appendingPathComponent(model.id)
-        
-        return fileManager.fileExists(atPath: modelDir.path)
     }
     
     private func downloadModel(_ model: WhisperModel, progressCallback: @escaping (Double) -> Void) async throws -> URL? {
@@ -119,7 +133,8 @@ final class ModelManager {
         
         let folder = try await WhisperKit.download(
             variant: model.id,
-            from: modelRepo,
+            downloadBase: ModelPathResolver.modelsBaseDirectory,
+            from: ModelPathResolver.modelRepo,
             progressCallback: { progress in
                 progressCallback(progress.fractionCompleted)
             }
@@ -134,7 +149,8 @@ final class ModelManager {
         do {
             let folder = try await WhisperKit.download(
                 variant: model.id,
-                from: modelRepo,
+                downloadBase: ModelPathResolver.modelsBaseDirectory,
+                from: ModelPathResolver.modelRepo,
                 progressCallback: { _ in }
             )
             return folder
