@@ -101,12 +101,12 @@ struct MainWindowView: View {
     private var panelsSection: some View {
         VStack(spacing: AppConstants.Layout.standardPadding) {
             // 转录面板 - 占据更多空间
-            TranscriptionPanel(text: appState.transcriptionText)
+            TranscriptionPanel(text: $appState.transcriptionText)
                 .frame(minHeight: 120)
             
             // 翻译面板 - 较小空间
             if appState.settingsManager.translationEnabled {
-                TranslationPanel(text: appState.translationText)
+                TranslationPanel(text: $appState.translationText)
             }
         }
         .padding(AppConstants.Layout.standardPadding)

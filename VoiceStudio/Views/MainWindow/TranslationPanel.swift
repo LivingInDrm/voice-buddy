@@ -2,14 +2,13 @@ import SwiftUI
 
 struct TranslationPanel: View {
     
-    let text: String
+    @Binding var text: String
     var placeholder: String = "Translation will appear here..."
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
             textContent
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(AppConstants.Layout.standardPadding)
             
             CopyButton(text: text, showLabel: false)
                 .padding(AppConstants.Layout.smallPadding)
@@ -20,29 +19,30 @@ struct TranslationPanel: View {
         )
     }
     
-    @ViewBuilder
     private var textContent: some View {
-        if text.isEmpty {
-            Text(placeholder)
-                .foregroundColor(AppConstants.Color.secondaryText)
-                .font(.body)
-                .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
-        } else {
-            ScrollView {
-                Text(text)
-                    .foregroundColor(AppConstants.Color.primaryText)
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundColor(AppConstants.Color.secondaryText)
                     .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.leading, 5)
+                    .padding(.top, 0)
+                    .allowsHitTesting(false)
             }
-            .frame(minHeight: 40, maxHeight: 100)
+            
+            TextEditor(text: $text)
+                .font(.body)
+                .foregroundColor(AppConstants.Color.primaryText)
+                .scrollContentBackground(.hidden)
         }
+        .padding(AppConstants.Layout.smallPadding)
+        .frame(minHeight: 40, maxHeight: 100)
     }
 }
 
 struct TranslationPanelSimple: View {
     
-    let text: String
+    @Binding var text: String
     var placeholder: String = "Translation will appear here..."
     
     var body: some View {
@@ -67,33 +67,35 @@ struct TranslationPanelSimple: View {
         )
     }
     
-    @ViewBuilder
     private var textContent: some View {
-        if text.isEmpty {
-            Text(placeholder)
-                .foregroundColor(AppConstants.Color.secondaryText)
-                .font(.body)
-                .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
-        } else {
-            ScrollView {
-                Text(text)
-                    .foregroundColor(AppConstants.Color.primaryText)
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundColor(AppConstants.Color.secondaryText)
                     .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.leading, 5)
+                    .padding(.top, 0)
+                    .allowsHitTesting(false)
             }
-            .frame(minHeight: 40, maxHeight: 100)
+            
+            TextEditor(text: $text)
+                .font(.body)
+                .foregroundColor(AppConstants.Color.primaryText)
+                .scrollContentBackground(.hidden)
         }
+        .padding(AppConstants.Layout.smallPadding)
+        .frame(minHeight: 40, maxHeight: 100)
     }
 }
 
 #Preview {
+    @Previewable @State var emptyText = ""
+    @Previewable @State var sampleText = "Hello, this is a test translation. Voice Studio is a native macOS voice assistant app."
+    
     VStack(spacing: 20) {
-        TranslationPanel(text: "")
+        TranslationPanel(text: $emptyText)
         
-        TranslationPanel(
-            text: "Hello, this is a test translation. Voice Studio is a native macOS voice assistant app."
-        )
+        TranslationPanel(text: $sampleText)
     }
     .padding()
     .frame(width: 400)
