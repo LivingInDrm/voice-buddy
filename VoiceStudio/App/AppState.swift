@@ -8,7 +8,7 @@ final class AppState {
     
     var recordingState: RecordingState = .idle
     var transcriptionText: String = ""
-    var translationText: String = ""
+    var translationTexts: [String: String] = [:]
     var audioLevel: Float = 0
     var isPreloadingModel: Bool = false
     
@@ -23,7 +23,7 @@ final class AppState {
     // MARK: - Results
     
     var lastTranscriptionResult: TranscriptionResult?
-    var lastTranslationResult: TranslationResult?
+    var lastTranslationResults: [String: TranslationResult] = [:]
     
     // MARK: - Services
     
@@ -178,26 +178,45 @@ final class AppState {
     }
     
     private func translateText(_ text: String) async {
-        translationText = "Translating..."
+        let targetLanguages = Array(settingsManager.targetLanguages)
         
-        do {
-            let result = try await translationCoordinator.translate(
-                text: text,
-                to: settingsManager.targetLanguage,
-                provider: settingsManager.translationProvider
-            )
-            translationText = result.translatedText
-            lastTranslationResult = result
-        } catch let error as TranslationError {
-            translationText = ""
-            if case .apiKeyMissing = error {
-                showError(.apiKeyMissing(settingsManager.translationProvider))
-            } else {
-                showToast(.error, message: error.localizedDescription)
+        // 初始化所有语言为 "Translating..."
+        for lang in targetLanguages {
+            translationTexts[lang] = "Translating..."
+        }
+        
+        // 并发翻译所有目标语言
+        await withTaskGroup(of: (String, Result<TranslationResult, Error>).self) { group in
+            for lang in targetLanguages {
+                group.addTask {
+                    do {
+                        let result = try await self.translationCoordinator.translate(
+                            text: text,
+                            to: lang,
+                            provider: self.settingsManager.translationProvider
+                        )
+                        return (lang, .success(result))
+                    } catch {
+                        return (lang, .failure(error))
+                    }
+                }
             }
-        } catch {
-            translationText = ""
-            showToast(.error, message: "Translation failed: \(error.localizedDescription)")
+            
+            for await (lang, result) in group {
+                switch result {
+                case .success(let translationResult):
+                    translationTexts[lang] = translationResult.translatedText
+                    lastTranslationResults[lang] = translationResult
+                case .failure(let error):
+                    translationTexts[lang] = ""
+                    if let translationError = error as? TranslationError,
+                       case .apiKeyMissing = translationError {
+                        showError(.apiKeyMissing(settingsManager.translationProvider))
+                    } else {
+                        showToast(.error, message: "Translation failed: \(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
     
@@ -216,9 +235,9 @@ final class AppState {
     
     func clear() {
         transcriptionText = ""
-        translationText = ""
+        translationTexts = [:]
         lastTranscriptionResult = nil
-        lastTranslationResult = nil
+        lastTranslationResults = [:]
         audioLevel = 0
     }
     

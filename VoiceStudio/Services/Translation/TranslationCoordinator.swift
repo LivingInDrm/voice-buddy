@@ -32,6 +32,17 @@ final class TranslationCoordinator {
     private(set) var isTranslating = false
     private(set) var lastError: TranslationError?
     
+    // 语言代码到完整名称的映射
+    private let languageNames: [String: String] = [
+        "en": "English",
+        "zh": "Chinese",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German"
+    ]
+    
     func translate(
         text: String,
         to targetLanguage: String,
@@ -49,8 +60,11 @@ final class TranslationCoordinator {
         let apiKey = try getApiKey(for: provider)
         let translator = createTranslator(provider: provider, apiKey: apiKey)
         
+        // 将语言代码转换为完整名称
+        let languageName = languageNames[targetLanguage] ?? targetLanguage
+        
         do {
-            let translatedText = try await translator.translate(text: text, to: targetLanguage)
+            let translatedText = try await translator.translate(text: text, to: languageName)
             let processingTime = Date().timeIntervalSince(startTime)
             
             return TranslationResult(

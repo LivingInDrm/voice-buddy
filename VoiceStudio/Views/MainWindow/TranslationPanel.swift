@@ -3,12 +3,25 @@ import SwiftUI
 struct TranslationPanel: View {
     
     @Binding var text: String
+    var languageLabel: String? = nil
     var placeholder: String = "Translation will appear here..."
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            textContent
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 0) {
+                if let label = languageLabel {
+                    Text(label.uppercased())
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(AppConstants.Color.secondaryText)
+                        .padding(.horizontal, AppConstants.Layout.smallPadding)
+                        .padding(.top, AppConstants.Layout.smallPadding)
+                        .padding(.bottom, 2)
+                }
+                
+                textContent
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
             
             CopyButton(text: text, showLabel: false)
                 .padding(AppConstants.Layout.smallPadding)

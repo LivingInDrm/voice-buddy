@@ -24,6 +24,24 @@ struct TranslationSettingsView: View {
         !settingsManager.anthropicApiKey.isEmpty
     }
     
+    private func languageBinding(for code: String) -> Binding<Bool> {
+        Binding(
+            get: { settingsManager.targetLanguages.contains(code) },
+            set: { isSelected in
+                var languages = settingsManager.targetLanguages
+                if isSelected {
+                    languages.insert(code)
+                } else {
+                    // 至少保留一个语言
+                    if languages.count > 1 {
+                        languages.remove(code)
+                    }
+                }
+                settingsManager.targetLanguages = languages
+            }
+        )
+    }
+    
     var body: some View {
         Form {
             Section {
@@ -36,15 +54,17 @@ struct TranslationSettingsView: View {
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(!settingsManager.translationEnabled)
-                
-                Picker("Target language", selection: $settingsManager.targetLanguage) {
-                    ForEach(targetLanguages, id: \.0) { code, name in
-                        Text(name).tag(code)
-                    }
+            } header: {
+                Text("Translation")
+            }
+            
+            Section {
+                ForEach(targetLanguages, id: \.0) { code, name in
+                    Toggle(name, isOn: languageBinding(for: code))
                 }
                 .disabled(!settingsManager.translationEnabled)
             } header: {
-                Text("Translation")
+                Text("Target Languages")
             }
             
             Section {

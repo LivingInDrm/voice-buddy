@@ -75,7 +75,7 @@ struct MainWindowView: View {
     // MARK: - 顶部工具栏
     private var topToolbar: some View {
         HStack {
-            Toggle("Translate to English", isOn: $appState.settingsManager.translationEnabled)
+            Toggle("Enable Translation", isOn: $appState.settingsManager.translationEnabled)
                 .toggleStyle(.checkbox)
                 .font(.subheadline)
             
@@ -90,11 +90,33 @@ struct MainWindowView: View {
                 appState.clear()
             }
             .buttonStyle(.borderless)
-            .disabled(appState.transcriptionText.isEmpty && appState.translationText.isEmpty)
+            .disabled(appState.transcriptionText.isEmpty && appState.translationTexts.isEmpty)
         }
         .padding(.horizontal, AppConstants.Layout.standardPadding)
         .padding(.vertical, AppConstants.Layout.smallPadding)
         .background(AppConstants.Color.secondaryBackground.opacity(0.3))
+    }
+    
+    // MARK: - 语言名称映射
+    private let languageNames: [String: String] = [
+        "en": "English",
+        "zh": "Chinese",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German"
+    ]
+    
+    private var sortedTargetLanguages: [String] {
+        Array(appState.settingsManager.targetLanguages).sorted()
+    }
+    
+    private func translationTextBinding(for langCode: String) -> Binding<String> {
+        Binding(
+            get: { appState.translationTexts[langCode] ?? "" },
+            set: { appState.translationTexts[langCode] = $0 }
+        )
     }
     
     // MARK: - 主面板区域（转录 + 翻译）
@@ -104,9 +126,14 @@ struct MainWindowView: View {
             TranscriptionPanel(text: $appState.transcriptionText)
                 .frame(minHeight: 120)
             
-            // 翻译面板 - 较小空间
+            // 翻译面板 - 每个目标语言一个
             if appState.settingsManager.translationEnabled {
-                TranslationPanel(text: $appState.translationText)
+                ForEach(sortedTargetLanguages, id: \.self) { langCode in
+                    TranslationPanel(
+                        text: translationTextBinding(for: langCode),
+                        languageLabel: languageNames[langCode] ?? langCode
+                    )
+                }
             }
         }
         .padding(AppConstants.Layout.standardPadding)

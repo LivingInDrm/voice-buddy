@@ -30,7 +30,7 @@ enum SettingsKey: String {
     case sourceLanguage = "sourceLanguage"
     case translationEnabled = "translationEnabled"
     case translationProvider = "translationProvider"
-    case targetLanguage = "targetLanguage"
+    case targetLanguages = "targetLanguages"
     case launchAtLogin = "launchAtLogin"
     case autoCopyToClipboard = "autoCopyToClipboard"
     case showInMenuBar = "showInMenuBar"
@@ -98,14 +98,20 @@ final class SettingsManager {
         }
     }
     
-    var targetLanguage: String {
+    var targetLanguages: Set<String> {
         get {
-            access(keyPath: \.targetLanguage)
-            return userDefaults.string(forKey: SettingsKey.targetLanguage.rawValue) ?? "en"
+            access(keyPath: \.targetLanguages)
+            if let data = userDefaults.data(forKey: SettingsKey.targetLanguages.rawValue),
+               let array = try? JSONDecoder().decode([String].self, from: data) {
+                return Set(array)
+            }
+            return ["en"] // 默认值
         }
         set {
-            withMutation(keyPath: \.targetLanguage) {
-                userDefaults.set(newValue, forKey: SettingsKey.targetLanguage.rawValue)
+            withMutation(keyPath: \.targetLanguages) {
+                if let data = try? JSONEncoder().encode(Array(newValue)) {
+                    userDefaults.set(data, forKey: SettingsKey.targetLanguages.rawValue)
+                }
             }
         }
     }
