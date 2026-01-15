@@ -19,10 +19,7 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.general)
             
-            RecognitionSettingsView(
-                settingsManager: appState.settingsManager,
-                modelManager: appState.modelManager
-            )
+            RecognitionSettingsView()
             .tabItem {
                 Label("Recognition", systemImage: "waveform")
             }

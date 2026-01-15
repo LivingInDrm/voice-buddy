@@ -26,7 +26,8 @@ struct VoiceStudioApp: App {
                     appState.cleanup()
                 }
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 500, height: 500)
+        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }

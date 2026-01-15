@@ -36,6 +36,7 @@ enum SettingsKey: String {
     case showInMenuBar = "showInMenuBar"
     case autoTypeTarget = "autoTypeTarget"
     case autoCopyTarget = "autoCopyTarget"
+    case enableTimestamps = "enableTimestamps"
 }
 
 @MainActor
@@ -45,6 +46,10 @@ final class SettingsManager {
     private let userDefaults = UserDefaults.standard
     
     init() {
+        userDefaults.register(defaults: [
+            SettingsKey.enableTimestamps.rawValue: true,
+            SettingsKey.showInMenuBar.rawValue: true
+        ])
         migrateSettings()
     }
     
@@ -161,9 +166,6 @@ final class SettingsManager {
     var showInMenuBar: Bool {
         get {
             access(keyPath: \.showInMenuBar)
-            if userDefaults.object(forKey: SettingsKey.showInMenuBar.rawValue) == nil {
-                return true
-            }
             return userDefaults.bool(forKey: SettingsKey.showInMenuBar.rawValue)
         }
         set {
@@ -197,6 +199,18 @@ final class SettingsManager {
         set {
             withMutation(keyPath: \.autoCopyTarget) {
                 userDefaults.set(newValue, forKey: SettingsKey.autoCopyTarget.rawValue)
+            }
+        }
+    }
+    
+    var enableTimestamps: Bool {
+        get {
+            access(keyPath: \.enableTimestamps)
+            return userDefaults.bool(forKey: SettingsKey.enableTimestamps.rawValue)
+        }
+        set {
+            withMutation(keyPath: \.enableTimestamps) {
+                userDefaults.set(newValue, forKey: SettingsKey.enableTimestamps.rawValue)
             }
         }
     }

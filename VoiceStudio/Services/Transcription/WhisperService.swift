@@ -4,6 +4,7 @@ import WhisperKit
 struct TranscriptionConfig {
     var language: String = "zh"
     var task: DecodingTask = .transcribe
+    var withoutTimestamps: Bool = false
     
     static let `default` = TranscriptionConfig()
 }
@@ -106,7 +107,7 @@ final class WhisperService {
                 task: config.task,
                 language: config.language,
                 skipSpecialTokens: true,
-                withoutTimestamps: false
+                withoutTimestamps: config.withoutTimestamps
             )
             
             let results = try await whisperKit.transcribe(

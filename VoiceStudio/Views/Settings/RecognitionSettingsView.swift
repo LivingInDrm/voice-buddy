@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct RecognitionSettingsView: View {
-    @Bindable var settingsManager: SettingsManager
-    @State var modelManager: ModelManager
+    @Environment(AppState.self) private var appState
     
     private let languages = [
         ("zh", "Chinese"),
@@ -20,6 +19,9 @@ struct RecognitionSettingsView: View {
     ]
     
     var body: some View {
+        @Bindable var settingsManager = appState.settingsManager
+        let modelManager = appState.modelManager
+        
         Form {
             Section {
                 ForEach(WhisperModel.allCases) { model in
@@ -27,7 +29,12 @@ struct RecognitionSettingsView: View {
                         model: model,
                         isSelected: settingsManager.selectedModel == model,
                         status: modelManager.status(for: model),
-                        onSelect: { settingsManager.selectedModel = model },
+                        onSelect: {
+                            settingsManager.selectedModel = model
+                            Task {
+                                await appState.preloadModelIfNeeded()
+                            }
+                        },
                         onDownload: { modelManager.startDownload(model) },
                         onPause: { modelManager.cancelDownload(model) },
                         onDelete: { modelManager.deleteModel(model) },
@@ -40,6 +47,8 @@ struct RecognitionSettingsView: View {
                         Text("\(name) (\(code))").tag(code)
                     }
                 }
+                
+                Toggle("Generate segment timestamps", isOn: $settingsManager.enableTimestamps)
             } header: {
                 Text("Speech Recognition")
             }
@@ -142,9 +151,7 @@ private struct ModelRow: View {
 }
 
 #Preview {
-    RecognitionSettingsView(
-        settingsManager: SettingsManager(),
-        modelManager: ModelManager()
-    )
-    .frame(width: 450, height: 300)
+    RecognitionSettingsView()
+        .environment(AppState())
+        .frame(width: 450, height: 300)
 }

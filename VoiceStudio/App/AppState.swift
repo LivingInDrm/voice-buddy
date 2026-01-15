@@ -145,7 +145,9 @@ final class AppState {
             }
             
             whisperService.updateConfig(TranscriptionConfig(
-                language: settingsManager.sourceLanguage
+                language: settingsManager.sourceLanguage,
+                // enableTimestamps (UI) is inverted for WhisperKit's withoutTimestamps parameter
+                withoutTimestamps: !settingsManager.enableTimestamps
             ))
             
             let result = try await whisperService.transcribe(audioData: audioData)
@@ -338,6 +340,7 @@ final class AppState {
         do {
             try await whisperService.loadModel(model)
         } catch {
+            print("[AppState] Failed to preload model: \(error.localizedDescription)")
         }
         isPreloadingModel = false
     }
