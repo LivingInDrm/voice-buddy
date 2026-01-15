@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -97,7 +98,8 @@ struct MenuBarView: View {
     
     private var openMainWindowButton: some View {
         Button {
-            NotificationCenter.default.post(name: .showMainWindow, object: nil)
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "main")
         } label: {
             HStack {
                 Image(systemName: "macwindow")

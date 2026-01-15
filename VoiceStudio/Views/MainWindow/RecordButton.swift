@@ -39,8 +39,8 @@ struct RecordButton: View {
         Circle()
             .fill(AppConstants.Color.recordingRed.opacity(0.3))
             .frame(
-                width: AppConstants.Layout.recordButtonSize + 30,
-                height: AppConstants.Layout.recordButtonSize + 30
+                width: AppConstants.Layout.recordButtonSize + 20,
+                height: AppConstants.Layout.recordButtonSize + 20
             )
             .blur(radius: 10)
             .phaseAnimator([false, true]) { content, phase in
@@ -71,10 +71,10 @@ struct RecordButton: View {
         } else if isRecording {
             RoundedRectangle(cornerRadius: 4)
                 .fill(.white)
-                .frame(width: 24, height: 24)
+                .frame(width: 18, height: 18)
         } else {
             Image(systemName: "mic.fill")
-                .font(.system(size: 28))
+                .font(.system(size: 22))
                 .foregroundColor(.white)
         }
     }

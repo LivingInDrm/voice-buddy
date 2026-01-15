@@ -168,7 +168,7 @@ struct WaveformSideView: View {
                 context.fill(path, with: .color(color.opacity(0.3 + level * 0.7)))
             }
         }
-        .frame(height: 50)
+        .frame(height: 36)
         .onChange(of: audioLevel) { _, newLevel in
             updateLevels(with: newLevel)
         }

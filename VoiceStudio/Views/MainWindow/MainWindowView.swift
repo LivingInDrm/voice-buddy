@@ -3,20 +3,16 @@ import SwiftUI
 struct MainWindowView: View {
     
     @Bindable var appState: AppState
+    @State private var selectedLanguage: String?
     
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部工具栏
-            topToolbar
-            
-            Divider()
-            
             // 主内容区域：转录 + 翻译面板
             panelsSection
             
             Divider()
             
-            // 底部录音区域：波形 + 麦克风按钮
+            // 底部录音区域：波形 + 麦克风按钮 + 设置
             recordingSection
         }
         .frame(
@@ -59,6 +55,12 @@ struct MainWindowView: View {
             Task {
                 await appState.preloadModelIfNeeded()
             }
+            initializeSelectedLanguage()
+        }
+        .onChange(of: sortedTargetLanguages) { _, newLanguages in
+            if selectedLanguage == nil || !newLanguages.contains(selectedLanguage!) {
+                selectedLanguage = newLanguages.first
+            }
         }
         .permissionAlerts(
             showMicrophoneAlert: Binding(
@@ -72,41 +74,11 @@ struct MainWindowView: View {
         )
     }
     
-    // MARK: - 顶部工具栏
-    private var topToolbar: some View {
-        HStack {
-            Toggle("Enable Translation", isOn: $appState.settingsManager.translationEnabled)
-                .toggleStyle(.checkbox)
-                .font(.subheadline)
-            
-            Spacer()
-            
-            SettingsLink {
-                Image(systemName: "gear")
-            }
-            .buttonStyle(.borderless)
-            
-            Button("Clear") {
-                appState.clear()
-            }
-            .buttonStyle(.borderless)
-            .disabled(appState.transcriptionText.isEmpty && appState.translationTexts.isEmpty)
+    private func initializeSelectedLanguage() {
+        if selectedLanguage == nil {
+            selectedLanguage = sortedTargetLanguages.first
         }
-        .padding(.horizontal, AppConstants.Layout.standardPadding)
-        .padding(.vertical, AppConstants.Layout.smallPadding)
-        .background(AppConstants.Color.secondaryBackground.opacity(0.3))
     }
-    
-    // MARK: - 语言名称映射
-    private let languageNames: [String: String] = [
-        "en": "English",
-        "zh": "Chinese",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "es": "Spanish",
-        "fr": "French",
-        "de": "German"
-    ]
     
     private var sortedTargetLanguages: [String] {
         Array(appState.settingsManager.targetLanguages).sorted()
@@ -121,27 +93,50 @@ struct MainWindowView: View {
     
     // MARK: - 主面板区域（转录 + 翻译）
     private var panelsSection: some View {
-        VStack(spacing: AppConstants.Layout.standardPadding) {
-            // 转录面板 - 占据更多空间
-            TranscriptionPanel(text: $appState.transcriptionText)
-                .frame(minHeight: 120)
-            
-            // 翻译面板 - 每个目标语言一个
-            if appState.settingsManager.translationEnabled {
-                ForEach(sortedTargetLanguages, id: \.self) { langCode in
-                    TranslationPanel(
-                        text: translationTextBinding(for: langCode),
-                        languageLabel: languageNames[langCode] ?? langCode
-                    )
+        ScrollView {
+            VStack(spacing: AppConstants.Layout.standardPadding) {
+                // 转录面板 - 主要区域
+                TranscriptionPanel(text: $appState.transcriptionText)
+                
+                // 翻译区域 - Tab 切换
+                if appState.settingsManager.translationEnabled {
+                    translationSection
                 }
+                
+                Spacer(minLength: 0)
+            }
+            .padding(AppConstants.Layout.standardPadding)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - 翻译区域（Tab + 面板）
+    private var translationSection: some View {
+        VStack(spacing: 12) {
+            // 语言 Tab 选择器
+            LanguageTabSelector(
+                languages: sortedTargetLanguages,
+                selectedLanguage: $selectedLanguage
+            )
+            
+            // 当前选中语言的翻译面板
+            if let langCode = selectedLanguage {
+                TranslationPanel(text: translationTextBinding(for: langCode))
+                    .id(langCode)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                TranslationPanel(text: .constant(""))
             }
         }
-        .padding(AppConstants.Layout.standardPadding)
     }
     
     // MARK: - 底部录音区域
     private var recordingSection: some View {
         HStack(spacing: 0) {
+            // 左侧：占位保持对称
+            Color.clear
+                .frame(width: 40)
+            
             // 左侧波形
             WaveformSideView(
                 audioLevel: appState.audioLevel,
@@ -156,7 +151,7 @@ struct MainWindowView: View {
                     await toggleRecording()
                 }
             }
-            .padding(.horizontal, AppConstants.Layout.standardPadding)
+            .padding(.horizontal, AppConstants.Layout.smallPadding)
             
             // 右侧波形
             WaveformSideView(
@@ -165,10 +160,17 @@ struct MainWindowView: View {
                 direction: .right
             )
             .frame(maxWidth: .infinity)
+            
+            // 右侧：设置按钮
+            SettingsLink {
+                Image(systemName: "gear")
+                    .font(.system(size: 16))
+                    .foregroundColor(AppConstants.Color.secondaryText)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 40)
         }
-        .padding(.horizontal, AppConstants.Layout.standardPadding)
-        .padding(.vertical, AppConstants.Layout.standardPadding)
-        .background(AppConstants.Color.secondaryBackground.opacity(0.3))
+        .frame(height: 60)
     }
     
     private func toggleRecording() async {

@@ -4,9 +4,10 @@ import SwiftUI
 struct VoiceStudioApp: App {
     @State private var appState = AppState()
     @State private var hasCheckedPermissions = false
+    @Environment(\.openWindow) private var openWindow
     
     var body: some Scene {
-        WindowGroup {
+        Window("Voice Studio", id: "main") {
             MainWindowView(appState: appState)
                 .environment(appState)
                 .task {
@@ -14,16 +15,12 @@ struct VoiceStudioApp: App {
                     hasCheckedPermissions = true
                     await checkPermissions()
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .showMainWindow)) { _ in
-                    NSApp.activate(ignoringOtherApps: true)
-                    if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title.contains("Voice Studio") }) {
-                        window.makeKeyAndOrderFront(nil)
-                    } else if let window = NSApp.windows.first(where: { !$0.title.isEmpty && $0.canBecomeKey }) {
-                        window.makeKeyAndOrderFront(nil)
-                    }
-                }
                 .onReceive(NotificationCenter.default.publisher(for: .copyLastResult)) { _ in
                     appState.copyLastResult()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .showMainWindow)) { _ in
+                    NSApp.activate(ignoringOtherApps: true)
+                    openWindow(id: "main")
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     appState.cleanup()

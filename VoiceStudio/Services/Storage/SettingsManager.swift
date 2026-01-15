@@ -34,6 +34,8 @@ enum SettingsKey: String {
     case launchAtLogin = "launchAtLogin"
     case autoCopyToClipboard = "autoCopyToClipboard"
     case showInMenuBar = "showInMenuBar"
+    case autoTypeTarget = "autoTypeTarget"
+    case autoCopyTarget = "autoCopyTarget"
 }
 
 @MainActor
@@ -41,6 +43,22 @@ enum SettingsKey: String {
 final class SettingsManager {
     
     private let userDefaults = UserDefaults.standard
+    
+    init() {
+        migrateSettings()
+    }
+    
+    /// 迁移旧设置到新设置
+    private func migrateSettings() {
+        // 迁移 autoCopyToClipboard -> autoCopyTarget
+        // 如果旧设置为 true 且新设置为空，则迁移到 "transcription"
+        if userDefaults.bool(forKey: SettingsKey.autoCopyToClipboard.rawValue) &&
+           userDefaults.string(forKey: SettingsKey.autoCopyTarget.rawValue) == nil {
+            userDefaults.set("transcription", forKey: SettingsKey.autoCopyTarget.rawValue)
+            // 清除旧设置标记迁移完成
+            userDefaults.set(false, forKey: SettingsKey.autoCopyToClipboard.rawValue)
+        }
+    }
     
     var selectedModel: WhisperModel {
         get {
@@ -151,6 +169,34 @@ final class SettingsManager {
         set {
             withMutation(keyPath: \.showInMenuBar) {
                 userDefaults.set(newValue, forKey: SettingsKey.showInMenuBar.rawValue)
+            }
+        }
+    }
+    
+    /// 自动输入到光标的目标区域（nil 表示关闭）
+    /// 可选值: "transcription", "translation-en", "translation-zh" 等
+    var autoTypeTarget: String? {
+        get {
+            access(keyPath: \.autoTypeTarget)
+            return userDefaults.string(forKey: SettingsKey.autoTypeTarget.rawValue)
+        }
+        set {
+            withMutation(keyPath: \.autoTypeTarget) {
+                userDefaults.set(newValue, forKey: SettingsKey.autoTypeTarget.rawValue)
+            }
+        }
+    }
+    
+    /// 自动复制到剪贴板的目标区域（nil 表示关闭）
+    /// 可选值: "transcription", "translation-en", "translation-zh" 等
+    var autoCopyTarget: String? {
+        get {
+            access(keyPath: \.autoCopyTarget)
+            return userDefaults.string(forKey: SettingsKey.autoCopyTarget.rawValue)
+        }
+        set {
+            withMutation(keyPath: \.autoCopyTarget) {
+                userDefaults.set(newValue, forKey: SettingsKey.autoCopyTarget.rawValue)
             }
         }
     }

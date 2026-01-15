@@ -96,6 +96,11 @@ struct TranslationSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            // 从 Keychain 加载已保存的 API 密钥
+            openaiKey = settingsManager.openaiApiKey
+            anthropicKey = settingsManager.anthropicApiKey
+        }
     }
 }
 

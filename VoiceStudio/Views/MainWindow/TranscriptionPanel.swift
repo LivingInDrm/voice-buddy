@@ -15,7 +15,12 @@ struct TranscriptionPanel: View {
         }
         .background(
             RoundedRectangle(cornerRadius: AppConstants.Layout.panelCornerRadius)
-                .fill(AppConstants.Color.secondaryBackground)
+                .fill(AppConstants.Color.background)
+                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppConstants.Layout.panelCornerRadius)
+                .strokeBorder(AppConstants.Color.secondaryBackground, lineWidth: 1)
         )
     }
     
@@ -36,7 +41,7 @@ struct TranscriptionPanel: View {
                 .scrollContentBackground(.hidden)
         }
         .padding(AppConstants.Layout.smallPadding)
-        .frame(minHeight: 60, maxHeight: 120)
+        .frame(minHeight: 80, maxHeight: 150)
     }
 }
 
