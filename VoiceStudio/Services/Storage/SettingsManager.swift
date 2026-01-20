@@ -1,30 +1,5 @@
 import SwiftUI
 
-// #region agent log
-private func appendLog(location: String, message: String, data: [String: Any], hypothesisId: String) {
-    let logPath = "/Users/xiaochunliu/program/voice-buddy/.cursor/debug.log"
-    let entry: [String: Any] = [
-        "timestamp": Date().timeIntervalSince1970 * 1000,
-        "location": location,
-        "message": message,
-        "data": data,
-        "sessionId": "debug-session",
-        "hypothesisId": hypothesisId
-    ]
-    if let jsonData = try? JSONSerialization.data(withJSONObject: entry),
-       let jsonString = String(data: jsonData, encoding: .utf8) {
-        let line = jsonString + "\n"
-        if let handle = FileHandle(forWritingAtPath: logPath) {
-            handle.seekToEndOfFile()
-            handle.write(line.data(using: .utf8)!)
-            handle.closeFile()
-        } else {
-            FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
-        }
-    }
-}
-// #endregion
-
 enum SettingsKey: String {
     case selectedModel = "selectedWhisperModel"
     case sourceLanguage = "sourceLanguage"
@@ -37,6 +12,8 @@ enum SettingsKey: String {
     case autoTypeTarget = "autoTypeTarget"
     case autoCopyTarget = "autoCopyTarget"
     case enableTimestamps = "enableTimestamps"
+    case recognitionProvider = "recognitionProvider"
+    case openaiTranscriptionModel = "openaiTranscriptionModel"
 }
 
 @MainActor
@@ -48,20 +25,23 @@ final class SettingsManager {
     init() {
         userDefaults.register(defaults: [
             SettingsKey.enableTimestamps.rawValue: true,
-            SettingsKey.showInMenuBar.rawValue: true
+            SettingsKey.showInMenuBar.rawValue: true,
+            SettingsKey.recognitionProvider.rawValue: RecognitionProvider.local.rawValue
         ])
         migrateSettings()
     }
     
-    /// 迁移旧设置到新设置
     private func migrateSettings() {
-        // 迁移 autoCopyToClipboard -> autoCopyTarget
-        // 如果旧设置为 true 且新设置为空，则迁移到 "transcription"
         if userDefaults.bool(forKey: SettingsKey.autoCopyToClipboard.rawValue) &&
            userDefaults.string(forKey: SettingsKey.autoCopyTarget.rawValue) == nil {
             userDefaults.set("transcription", forKey: SettingsKey.autoCopyTarget.rawValue)
-            // 清除旧设置标记迁移完成
             userDefaults.set(false, forKey: SettingsKey.autoCopyToClipboard.rawValue)
+        }
+        
+        if !userDefaults.bool(forKey: "anthropic_migration_completed") {
+            // One-time migration: Clean up deprecated Anthropic API Key (removed in v2.0)
+            try? KeychainManager.delete(key: "anthropic_api_key")
+            userDefaults.set(true, forKey: "anthropic_migration_completed")
         }
     }
     
@@ -128,7 +108,7 @@ final class SettingsManager {
                let array = try? JSONDecoder().decode([String].self, from: data) {
                 return Set(array)
             }
-            return ["en"] // 默认值
+            return ["en"]
         }
         set {
             withMutation(keyPath: \.targetLanguages) {
@@ -175,8 +155,6 @@ final class SettingsManager {
         }
     }
     
-    /// 自动输入到光标的目标区域（nil 表示关闭）
-    /// 可选值: "transcription", "translation-en", "translation-zh" 等
     var autoTypeTarget: String? {
         get {
             access(keyPath: \.autoTypeTarget)
@@ -189,8 +167,6 @@ final class SettingsManager {
         }
     }
     
-    /// 自动复制到剪贴板的目标区域（nil 表示关闭）
-    /// 可选值: "transcription", "translation-en", "translation-zh" 等
     var autoCopyTarget: String? {
         get {
             access(keyPath: \.autoCopyTarget)
@@ -231,52 +207,39 @@ final class SettingsManager {
         }
     }
     
-    var anthropicApiKey: String {
+    var recognitionProvider: RecognitionProvider {
         get {
-            access(keyPath: \.anthropicApiKey)
-            let result = (try? KeychainManager.load(key: KeychainKey.anthropicApiKey)) ?? ""
-            // #region agent log
-            appendLog(location: "SettingsManager.swift:anthropicApiKey.get", message: "Loading Anthropic API key", data: ["keyLength": result.count, "isEmpty": result.isEmpty, "prefix": String(result.prefix(10))], hypothesisId: "C")
-            // #endregion
-            return result
+            access(keyPath: \.recognitionProvider)
+            if let rawValue = userDefaults.string(forKey: SettingsKey.recognitionProvider.rawValue),
+               let provider = RecognitionProvider(rawValue: rawValue) {
+                return provider
+            }
+            return .local
         }
         set {
-            withMutation(keyPath: \.anthropicApiKey) {
-                // #region agent log
-                appendLog(location: "SettingsManager.swift:anthropicApiKey.set", message: "Saving Anthropic API key", data: ["keyLength": newValue.count, "isEmpty": newValue.isEmpty, "prefix": String(newValue.prefix(10))], hypothesisId: "B")
-                // #endregion
-                if newValue.isEmpty {
-                    try? KeychainManager.delete(key: KeychainKey.anthropicApiKey)
-                } else {
-                    do {
-                        try KeychainManager.save(key: KeychainKey.anthropicApiKey, value: newValue)
-                        // #region agent log
-                        appendLog(location: "SettingsManager.swift:anthropicApiKey.set", message: "Save succeeded", data: [:], hypothesisId: "B")
-                        // #endregion
-                    } catch {
-                        // #region agent log
-                        appendLog(location: "SettingsManager.swift:anthropicApiKey.set", message: "Save FAILED", data: ["error": error.localizedDescription], hypothesisId: "B")
-                        // #endregion
-                    }
-                }
+            withMutation(keyPath: \.recognitionProvider) {
+                userDefaults.set(newValue.rawValue, forKey: SettingsKey.recognitionProvider.rawValue)
             }
         }
     }
     
-    func hasApiKey(for provider: TranslationProvider) -> Bool {
-        switch provider {
-        case .openai:
-            return !openaiApiKey.isEmpty
-        case .anthropic:
-            return !anthropicApiKey.isEmpty
+    var openaiTranscriptionModel: OpenAITranscriptionModel {
+        get {
+            access(keyPath: \.openaiTranscriptionModel)
+            if let rawValue = userDefaults.string(forKey: SettingsKey.openaiTranscriptionModel.rawValue),
+               let model = OpenAITranscriptionModel(rawValue: rawValue) {
+                return model
+            }
+            return .whisper1
+        }
+        set {
+            withMutation(keyPath: \.openaiTranscriptionModel) {
+                userDefaults.set(newValue.rawValue, forKey: SettingsKey.openaiTranscriptionModel.rawValue)
+            }
         }
     }
     
-    func apiKey(for provider: TranslationProvider) -> String? {
-        let key = switch provider {
-        case .openai: openaiApiKey
-        case .anthropic: anthropicApiKey
-        }
-        return key.isEmpty ? nil : key
+    var hasOpenAIApiKey: Bool {
+        !openaiApiKey.isEmpty
     }
 }

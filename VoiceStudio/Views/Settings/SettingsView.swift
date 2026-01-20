@@ -4,6 +4,7 @@ enum SettingsTab: Hashable {
     case general
     case recognition
     case translation
+    case apiKeys
     case shortcuts
 }
 
@@ -30,6 +31,12 @@ struct SettingsView: View {
                     Label("Translation", systemImage: "globe")
                 }
                 .tag(SettingsTab.translation)
+            
+            APISettingsView(settingsManager: appState.settingsManager)
+                .tabItem {
+                    Label("API Keys", systemImage: "key.fill")
+                }
+                .tag(SettingsTab.apiKeys)
             
             ShortcutsSettingsView()
                 .tabItem {

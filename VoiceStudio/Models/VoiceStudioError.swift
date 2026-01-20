@@ -13,8 +13,9 @@ enum VoiceStudioError: LocalizedError {
     case emptyTranscription
     
     case translationFailed(String)
-    case apiKeyMissing(TranslationProvider)
+    case apiKeyMissing
     case networkError(String)
+    case audioTooLargeForCloud
     
     var errorDescription: String? {
         switch self {
@@ -36,10 +37,12 @@ enum VoiceStudioError: LocalizedError {
             return "No speech detected"
         case .translationFailed(let message):
             return "Translation failed: \(message)"
-        case .apiKeyMissing(let provider):
-            return "\(provider.displayName) API key not configured"
+        case .apiKeyMissing:
+            return "OpenAI API key not configured"
         case .networkError(let message):
             return "Network error: \(message)"
+        case .audioTooLargeForCloud:
+            return "Recording too long for cloud processing"
         }
     }
     
@@ -63,16 +66,18 @@ enum VoiceStudioError: LocalizedError {
             return "Please speak clearly into the microphone"
         case .translationFailed:
             return "Check your API key and try again"
-        case .apiKeyMissing(let provider):
-            return "Please enter your \(provider.displayName) API key in Settings"
+        case .apiKeyMissing:
+            return "Please enter your OpenAI API key in Settings > API Keys"
         case .networkError:
             return "Check your internet connection"
+        case .audioTooLargeForCloud:
+            return "OpenAI limits audio to ~13 minutes. Use local recognition for longer recordings."
         }
     }
     
     var requiresUserAction: Bool {
         switch self {
-        case .microphonePermissionDenied, .apiKeyMissing, .modelNotDownloaded:
+        case .microphonePermissionDenied, .apiKeyMissing, .modelNotDownloaded, .audioTooLargeForCloud:
             return true
         default:
             return false
@@ -87,6 +92,8 @@ enum VoiceStudioError: LocalizedError {
             return "Open Settings"
         case .modelNotDownloaded:
             return "Download Model"
+        case .audioTooLargeForCloud:
+            return "Use Local"
         default:
             return "OK"
         }

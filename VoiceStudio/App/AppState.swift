@@ -13,6 +13,7 @@ final class AppState {
     var isPreloadingModel: Bool = false
     
     private var recordingStartTime: Date?
+    private var pendingAudioData: [Float]?
     
     // MARK: - Alerts & Errors
     
@@ -36,6 +37,7 @@ final class AppState {
     let translationCoordinator = TranslationCoordinator()
     let hotkeyManager = HotkeyManager()
     let modelManager = ModelManager()
+    let openaiTranscriptionService = OpenAITranscriptionService()
     
     // MARK: - Initialization
     
@@ -67,12 +69,72 @@ final class AppState {
             NotificationCenter.default.post(name: .showMainWindow, object: nil)
         case .modelNotDownloaded:
             modelManager.startDownload(settingsManager.selectedModel)
+        case .audioTooLargeForCloud:
+            Task {
+                await retryWithLocalRecognition()
+            }
         default:
             break
         }
         
         showErrorAlert = false
         currentError = nil
+    }
+    
+    private func retryWithLocalRecognition() async {
+        guard let audioData = pendingAudioData else {
+            showToast(.error, message: "No pending audio data")
+            return
+        }
+        
+        let model = settingsManager.selectedModel
+        if modelManager.status(for: model) != .downloaded {
+            showError(.modelNotDownloaded(model.displayName))
+            return
+        }
+        
+        recordingState = .processing
+        
+        do {
+            if !whisperService.isReady || whisperService.loadedModel != model {
+                showToast(.info, message: "Loading model...")
+                try await whisperService.loadModel(model)
+            }
+            
+            whisperService.updateConfig(TranscriptionConfig(
+                language: settingsManager.sourceLanguage,
+                task: .transcribe,
+                withoutTimestamps: !settingsManager.enableTimestamps
+            ))
+            
+            let result = try await whisperService.transcribe(audioData: audioData)
+            pendingAudioData = nil
+            
+            if result.text.isEmpty {
+                showToast(.info, message: "No speech detected")
+                recordingState = .idle
+                return
+            }
+            
+            transcriptionText = result.text
+            lastTranscriptionResult = result
+            recordingState = .idle
+            
+            let needsTranslation = settingsManager.translationEnabled && !result.text.isEmpty
+            if !needsTranslation {
+                performAutoActions()
+            } else {
+                performAutoActionsForTarget("transcription")
+            }
+            
+            if needsTranslation {
+                await translateText(result.text)
+            }
+        } catch {
+            pendingAudioData = nil
+            showError(.transcriptionFailed(error.localizedDescription))
+            recordingState = .idle
+        }
     }
     
     private func setupAudioLevelCallback() {
@@ -106,38 +168,64 @@ final class AppState {
             return
         }
         
-        let model = settingsManager.selectedModel
-        if modelManager.status(for: model) != .downloaded {
-            showError(.modelNotDownloaded(model.displayName))
-            return
-        }
+        let provider = settingsManager.recognitionProvider
         
-        do {
-            if !whisperService.isReady || whisperService.loadedModel != model {
-                showToast(.info, message: "Loading model...")
-                try await whisperService.loadModel(model)
+        switch provider {
+        case .local:
+            let model = settingsManager.selectedModel
+            if modelManager.status(for: model) != .downloaded {
+                showError(.modelNotDownloaded(model.displayName))
+                return
             }
             
-            transcriptionText = ""
-            recordingStartTime = Date()
+            do {
+                if !whisperService.isReady || whisperService.loadedModel != model {
+                    showToast(.info, message: "Loading model...")
+                    try await whisperService.loadModel(model)
+                }
+                
+                transcriptionText = ""
+                recordingStartTime = Date()
+                
+                try await audioManager.startRecording()
+                recordingState = .recording
+            } catch let error as AudioError {
+                recordingStartTime = nil
+                showError(.audioEngineError(error.localizedDescription))
+                recordingState = .idle
+            } catch let error as WhisperServiceError {
+                _ = await audioManager.stopRecording()
+                recordingStartTime = nil
+                showError(.transcriptionFailed(error.localizedDescription))
+                recordingState = .idle
+            } catch {
+                _ = await audioManager.stopRecording()
+                recordingStartTime = nil
+                showError(.audioEngineError(error.localizedDescription))
+                recordingState = .idle
+            }
             
-            try await audioManager.startRecording()
+        case .openai:
+            if !settingsManager.hasOpenAIApiKey {
+                showError(.apiKeyMissing)
+                return
+            }
             
-            recordingState = .recording
-        } catch let error as AudioError {
-            recordingStartTime = nil
-            showError(.audioEngineError(error.localizedDescription))
-            recordingState = .idle
-        } catch let error as WhisperServiceError {
-            _ = await audioManager.stopRecording()
-            recordingStartTime = nil
-            showError(.transcriptionFailed(error.localizedDescription))
-            recordingState = .idle
-        } catch {
-            _ = await audioManager.stopRecording()
-            recordingStartTime = nil
-            showError(.audioEngineError(error.localizedDescription))
-            recordingState = .idle
+            do {
+                transcriptionText = ""
+                recordingStartTime = Date()
+                
+                try await audioManager.startRecording()
+                recordingState = .recording
+            } catch let error as AudioError {
+                recordingStartTime = nil
+                showError(.audioEngineError(error.localizedDescription))
+                recordingState = .idle
+            } catch {
+                recordingStartTime = nil
+                showError(.audioEngineError(error.localizedDescription))
+                recordingState = .idle
+            }
         }
     }
     
@@ -162,14 +250,29 @@ final class AppState {
         
         recordingState = .processing
         
+        let provider = settingsManager.recognitionProvider
+        
         do {
-            whisperService.updateConfig(TranscriptionConfig(
-                language: settingsManager.sourceLanguage,
-                task: .transcribe,
-                withoutTimestamps: !settingsManager.enableTimestamps
-            ))
+            let result: TranscriptionResult
             
-            let result = try await whisperService.transcribe(audioData: audioData)
+            switch provider {
+            case .local:
+                whisperService.updateConfig(TranscriptionConfig(
+                    language: settingsManager.sourceLanguage,
+                    task: .transcribe,
+                    withoutTimestamps: !settingsManager.enableTimestamps
+                ))
+                result = try await whisperService.transcribe(audioData: audioData)
+                
+            case .openai:
+                result = try await openaiTranscriptionService.transcribe(
+                    audioData: audioData,
+                    model: settingsManager.openaiTranscriptionModel,
+                    language: settingsManager.sourceLanguage,
+                    apiKey: settingsManager.openaiApiKey,
+                    enableTimestamps: settingsManager.enableTimestamps
+                )
+            }
             
             if result.text.isEmpty {
                 showToast(.info, message: "No speech detected")
@@ -191,6 +294,16 @@ final class AppState {
             if needsTranslation {
                 await translateText(result.text)
             }
+        } catch let error as OpenAITranscriptionError {
+            if case .apiKeyMissing = error {
+                showError(.apiKeyMissing)
+            } else if case .audioTooLarge = error {
+                pendingAudioData = audioData
+                showError(.audioTooLargeForCloud)
+            } else {
+                showError(.transcriptionFailed(error.localizedDescription))
+            }
+            recordingState = .idle
         } catch {
             showError(.transcriptionFailed(error.localizedDescription))
             recordingState = .idle
@@ -210,8 +323,7 @@ final class AppState {
                     do {
                         let result = try await self.translationCoordinator.translate(
                             text: text,
-                            to: lang,
-                            provider: self.settingsManager.translationProvider
+                            to: lang
                         )
                         return (lang, .success(result))
                     } catch {
@@ -230,7 +342,7 @@ final class AppState {
                     translationTexts[lang] = ""
                     if let translationError = error as? TranslationError,
                        case .apiKeyMissing = translationError {
-                        showError(.apiKeyMissing(settingsManager.translationProvider))
+                        showError(.apiKeyMissing)
                     } else {
                         showToast(.error, message: "Translation failed: \(error.localizedDescription)")
                     }
@@ -327,6 +439,8 @@ final class AppState {
     }
     
     func preloadModelIfNeeded() async {
+        guard settingsManager.recognitionProvider == .local else { return }
+        
         let model = settingsManager.selectedModel
         
         guard !whisperService.isReady || whisperService.loadedModel != model else { return }

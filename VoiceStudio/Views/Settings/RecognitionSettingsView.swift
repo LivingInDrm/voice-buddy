@@ -24,24 +24,74 @@ struct RecognitionSettingsView: View {
         
         Form {
             Section {
-                ForEach(WhisperModel.allCases) { model in
-                    ModelRow(
-                        model: model,
-                        isSelected: settingsManager.selectedModel == model,
-                        status: modelManager.status(for: model),
-                        onSelect: {
-                            settingsManager.selectedModel = model
-                            Task {
-                                await appState.preloadModelIfNeeded()
-                            }
-                        },
-                        onDownload: { modelManager.startDownload(model) },
-                        onPause: { modelManager.cancelDownload(model) },
-                        onDelete: { modelManager.deleteModel(model) },
-                        onRepair: { modelManager.repairDownload(model) }
-                    )
+                Picker("Provider", selection: $settingsManager.recognitionProvider) {
+                    ForEach(RecognitionProvider.allCases) { provider in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(provider.displayName)
+                            Text(provider.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(provider)
+                    }
                 }
-                
+                .pickerStyle(.radioGroup)
+            } header: {
+                Text("Recognition Provider")
+            }
+            
+            if settingsManager.recognitionProvider == .local {
+                Section {
+                    ForEach(WhisperModel.allCases) { model in
+                        ModelRow(
+                            model: model,
+                            isSelected: settingsManager.selectedModel == model,
+                            status: modelManager.status(for: model),
+                            onSelect: {
+                                settingsManager.selectedModel = model
+                                Task {
+                                    await appState.preloadModelIfNeeded()
+                                }
+                            },
+                            onDownload: { modelManager.startDownload(model) },
+                            onPause: { modelManager.cancelDownload(model) },
+                            onDelete: { modelManager.deleteModel(model) },
+                            onRepair: { modelManager.repairDownload(model) }
+                        )
+                    }
+                } header: {
+                    Text("Local Whisper Model")
+                }
+            } else {
+                Section {
+                    Picker("Model", selection: $settingsManager.openaiTranscriptionModel) {
+                        ForEach(OpenAITranscriptionModel.allCases) { model in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.displayName)
+                                Text(model.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .tag(model)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    
+                    if !settingsManager.hasOpenAIApiKey {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("OpenAI API key required. Configure in API Keys tab.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("OpenAI Model")
+                }
+            }
+            
+            Section {
                 Picker("Language", selection: $settingsManager.sourceLanguage) {
                     ForEach(languages, id: \.0) { code, name in
                         Text("\(name) (\(code))").tag(code)
@@ -54,6 +104,13 @@ struct RecognitionSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: settingsManager.recognitionProvider) { _, newValue in
+            if newValue == .local {
+                Task {
+                    await appState.preloadModelIfNeeded()
+                }
+            }
+        }
     }
 }
 
@@ -153,5 +210,5 @@ private struct ModelRow: View {
 #Preview {
     RecognitionSettingsView()
         .environment(AppState())
-        .frame(width: 450, height: 300)
+        .frame(width: 450, height: 400)
 }

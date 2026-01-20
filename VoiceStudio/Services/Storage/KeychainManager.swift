@@ -3,7 +3,6 @@ import Security
 
 enum KeychainKey {
     static let openaiApiKey = "openai_api_key"
-    static let anthropicApiKey = "anthropic_api_key"
 }
 
 enum KeychainError: LocalizedError {
