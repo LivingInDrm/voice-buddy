@@ -9,6 +9,7 @@ struct TranslationPanel: View {
         ZStack(alignment: .topTrailing) {
             textContent
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.trailing, 16)
             
             CopyButton(text: text, showLabel: false)
                 .padding(AppConstants.Layout.smallPadding)

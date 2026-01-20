@@ -96,7 +96,10 @@ struct MainWindowView: View {
         ScrollView {
             VStack(spacing: AppConstants.Layout.standardPadding) {
                 // 转录面板 - 主要区域
-                TranscriptionPanel(text: $appState.transcriptionText)
+                TranscriptionPanel(
+                    text: $appState.transcriptionText,
+                    isRecording: appState.recordingState.isRecording
+                )
                 
                 // 翻译区域 - Tab 切换
                 if appState.settingsManager.translationEnabled {

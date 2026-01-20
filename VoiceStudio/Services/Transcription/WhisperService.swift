@@ -49,6 +49,8 @@ final class WhisperService {
     private var whisperKit: WhisperKit?
     private var config: TranscriptionConfig = .default
     
+    private let sampleRate: Double = 16000.0
+    
     init() {}
     
     var isReady: Bool {
@@ -100,7 +102,7 @@ final class WhisperService {
         state = .transcribing
         
         let startTime = Date()
-        let audioDuration = Double(audioData.count) / 16000.0
+        let audioDuration = Double(audioData.count) / sampleRate
         
         do {
             let options = DecodingOptions(

@@ -132,12 +132,14 @@ final class AudioManager {
         let rms = Self.calculateRMS(floatData, frameCount: frameLength)
         let samples = Array(UnsafeBufferPointer(start: floatData, count: frameLength))
         
-        Task { [weak self] in
-            await self?.bufferStorage.append(contentsOf: samples)
-        }
-        
-        Task { @MainActor [weak self] in
-            self?.onAudioLevelUpdate?(rms)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            Task {
+                await self.bufferStorage.append(contentsOf: samples)
+            }
+            
+            self.onAudioLevelUpdate?(rms)
         }
     }
     

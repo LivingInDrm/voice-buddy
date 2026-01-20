@@ -12,6 +12,8 @@ final class AppState {
     var audioLevel: Float = 0
     var isPreloadingModel: Bool = false
     
+    private var recordingStartTime: Date?
+    
     // MARK: - Alerts & Errors
     
     var currentToast: ToastItem?
@@ -104,13 +106,36 @@ final class AppState {
             return
         }
         
+        let model = settingsManager.selectedModel
+        if modelManager.status(for: model) != .downloaded {
+            showError(.modelNotDownloaded(model.displayName))
+            return
+        }
+        
         do {
+            if !whisperService.isReady || whisperService.loadedModel != model {
+                showToast(.info, message: "Loading model...")
+                try await whisperService.loadModel(model)
+            }
+            
+            transcriptionText = ""
+            recordingStartTime = Date()
+            
             try await audioManager.startRecording()
+            
             recordingState = .recording
         } catch let error as AudioError {
+            recordingStartTime = nil
             showError(.audioEngineError(error.localizedDescription))
             recordingState = .idle
+        } catch let error as WhisperServiceError {
+            _ = await audioManager.stopRecording()
+            recordingStartTime = nil
+            showError(.transcriptionFailed(error.localizedDescription))
+            recordingState = .idle
         } catch {
+            _ = await audioManager.stopRecording()
+            recordingStartTime = nil
             showError(.audioEngineError(error.localizedDescription))
             recordingState = .idle
         }
@@ -122,8 +147,14 @@ final class AppState {
         let audioData = await audioManager.stopRecording()
         audioLevel = 0
         
-        let audioDuration = Double(audioData.count) / AppConstants.Audio.sampleRate
-        if audioDuration < AppConstants.Audio.minimumRecordingDuration {
+        guard let startTime = recordingStartTime else {
+            showToast(.info, message: "Recording error")
+            recordingState = .idle
+            return
+        }
+        
+        let audioDuration = Date().timeIntervalSince(startTime)
+        if audioDuration < AppConstants.Audio.minimumRecordingDuration || audioData.isEmpty {
             showToast(.info, message: "Recording too short")
             recordingState = .idle
             return
@@ -131,22 +162,10 @@ final class AppState {
         
         recordingState = .processing
         
-        let model = settingsManager.selectedModel
-        if modelManager.status(for: model) != .downloaded {
-            showError(.modelNotDownloaded(model.displayName))
-            recordingState = .idle
-            return
-        }
-        
         do {
-            if !whisperService.isReady || whisperService.loadedModel != model {
-                showToast(.info, message: "Loading model...")
-                try await whisperService.loadModel(model)
-            }
-            
             whisperService.updateConfig(TranscriptionConfig(
                 language: settingsManager.sourceLanguage,
-                // enableTimestamps (UI) is inverted for WhisperKit's withoutTimestamps parameter
+                task: .transcribe,
                 withoutTimestamps: !settingsManager.enableTimestamps
             ))
             
@@ -162,22 +181,16 @@ final class AppState {
             lastTranscriptionResult = result
             recordingState = .idle
             
-            // 执行自动操作（仅当不需要翻译，或者目标是 transcription 时）
             let needsTranslation = settingsManager.translationEnabled && !result.text.isEmpty
             if !needsTranslation {
-                // 不需要翻译，立即执行所有自动操作
                 performAutoActions()
             } else {
-                // 需要翻译，先检查 transcription 相关的自动操作
                 performAutoActionsForTarget("transcription")
             }
             
             if needsTranslation {
                 await translateText(result.text)
             }
-        } catch let error as WhisperServiceError {
-            showError(.transcriptionFailed(error.localizedDescription))
-            recordingState = .idle
         } catch {
             showError(.transcriptionFailed(error.localizedDescription))
             recordingState = .idle
@@ -187,12 +200,10 @@ final class AppState {
     private func translateText(_ text: String) async {
         let targetLanguages = Array(settingsManager.targetLanguages)
         
-        // 初始化所有语言为 "Translating..."
         for lang in targetLanguages {
             translationTexts[lang] = "Translating..."
         }
         
-        // 并发翻译所有目标语言
         await withTaskGroup(of: (String, Result<TranslationResult, Error>).self) { group in
             for lang in targetLanguages {
                 group.addTask {
@@ -214,7 +225,6 @@ final class AppState {
                 case .success(let translationResult):
                     translationTexts[lang] = translationResult.translatedText
                     lastTranslationResults[lang] = translationResult
-                    // 检查是否需要对这个翻译语言执行自动操作
                     performAutoActionsForTarget("translation-\(lang)")
                 case .failure(let error):
                     translationTexts[lang] = ""
@@ -231,23 +241,19 @@ final class AppState {
     
     // MARK: - Auto Actions
     
-    /// 执行所有自动操作
     private func performAutoActions() {
         let autoTypeTarget = settingsManager.autoTypeTarget
         let autoCopyTarget = settingsManager.autoCopyTarget
         
-        // 检查是否同时启用且目标相同（需要跳过剪贴板恢复以避免时序冲突）
         let shouldSkipClipboardRestore = autoTypeTarget != nil &&
                                           autoCopyTarget != nil &&
                                           autoTypeTarget == autoCopyTarget
         
-        // 自动输入到光标
         if let target = autoTypeTarget,
            let text = getTextForTarget(target), !text.isEmpty {
             performAutoType(text, restoreClipboard: !shouldSkipClipboardRestore)
         }
         
-        // 自动复制到剪贴板
         if let target = autoCopyTarget,
            let text = getTextForTarget(target), !text.isEmpty {
             copyToClipboard(text)
@@ -255,22 +261,18 @@ final class AppState {
         }
     }
     
-    /// 仅对指定目标执行自动操作
     private func performAutoActionsForTarget(_ target: String) {
         let autoTypeTarget = settingsManager.autoTypeTarget
         let autoCopyTarget = settingsManager.autoCopyTarget
         
-        // 检查是否同时启用且目标相同
         let shouldSkipClipboardRestore = autoTypeTarget == target &&
                                           autoCopyTarget == target
         
-        // 自动输入到光标
         if autoTypeTarget == target,
            let text = getTextForTarget(target), !text.isEmpty {
             performAutoType(text, restoreClipboard: !shouldSkipClipboardRestore)
         }
         
-        // 自动复制到剪贴板
         if autoCopyTarget == target,
            let text = getTextForTarget(target), !text.isEmpty {
             copyToClipboard(text)
@@ -278,7 +280,6 @@ final class AppState {
         }
     }
     
-    /// 根据目标标识获取对应的文本
     private func getTextForTarget(_ target: String) -> String? {
         if target == "transcription" {
             return transcriptionText.isEmpty ? nil : transcriptionText
@@ -289,13 +290,8 @@ final class AppState {
         return nil
     }
     
-    /// 执行自动输入到光标位置
-    /// - Parameters:
-    ///   - text: 要输入的文本
-    ///   - restoreClipboard: 是否在输入后恢复原剪贴板内容
     private func performAutoType(_ text: String, restoreClipboard: Bool = true) {
         if !PermissionHelper.isAccessibilityAuthorized() {
-            // 直接触发系统级权限请求对话框，不打开主窗口
             PermissionHelper.requestAccessibilityPermission()
             showToast(.info, message: "Please grant Accessibility permission to enable auto-type")
             return

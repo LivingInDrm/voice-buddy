@@ -1,8 +1,16 @@
 import SwiftUI
+import KeyboardShortcuts
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
+    
+    private var pushToTalkShortcutString: String {
+        guard let shortcut = KeyboardShortcuts.getShortcut(for: .pushToTalk) else {
+            return ""
+        }
+        return shortcut.description
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,7 +60,7 @@ struct MenuBarView: View {
                 
                 Spacer()
                 
-                Text("⌘⇧V")
+                Text(pushToTalkShortcutString)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

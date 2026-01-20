@@ -3,12 +3,14 @@ import SwiftUI
 struct TranscriptionPanel: View {
     
     @Binding var text: String
+    var isRecording: Bool = false
     var placeholder: String = "Transcription will appear here..."
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
             textContent
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.trailing, 16)
             
             CopyButton(text: text, showLabel: false)
                 .padding(AppConstants.Layout.smallPadding)
@@ -20,11 +22,30 @@ struct TranscriptionPanel: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppConstants.Layout.panelCornerRadius)
-                .strokeBorder(AppConstants.Color.secondaryBackground, lineWidth: 1)
+                .strokeBorder(isRecording ? Color.accentColor.opacity(0.5) : AppConstants.Color.secondaryBackground, lineWidth: 1)
         )
     }
     
     private var textContent: some View {
+        ZStack(alignment: .topLeading) {
+            if isRecording {
+                recordingContent
+            } else {
+                editableContent
+            }
+        }
+        .padding(AppConstants.Layout.smallPadding)
+        .frame(minHeight: 80, maxHeight: 150)
+    }
+    
+    private var recordingContent: some View {
+        Text("Recording...")
+            .foregroundColor(AppConstants.Color.secondaryText)
+            .font(.body)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+    
+    private var editableContent: some View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty {
                 Text(placeholder)
@@ -40,8 +61,6 @@ struct TranscriptionPanel: View {
                 .foregroundColor(AppConstants.Color.primaryText)
                 .scrollContentBackground(.hidden)
         }
-        .padding(AppConstants.Layout.smallPadding)
-        .frame(minHeight: 80, maxHeight: 150)
     }
 }
 

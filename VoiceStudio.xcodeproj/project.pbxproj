@@ -535,6 +535,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voicestudio.app;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = UM84M3QTSD;
 				PRODUCT_NAME = "Voice Studio";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
@@ -620,6 +623,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.voicestudio.app;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = UM84M3QTSD;
 				PRODUCT_NAME = "Voice Studio";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
