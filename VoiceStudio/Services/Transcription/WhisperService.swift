@@ -50,6 +50,21 @@ final class WhisperService {
     private var config: TranscriptionConfig = .default
     
     private let sampleRate: Double = 16000.0
+    private let silenceThreshold: Float = 0.01
+    
+    private let hallucinationPatterns: [String] = [
+        "请不吝点赞",
+        "订阅",
+        "转发",
+        "打赏支持",
+        "明镜与点点",
+        "Thanks for watching",
+        "Subscribe",
+        "谢谢观看",
+        "字幕由",
+        "字幕提供",
+        "Amara.org",
+    ]
     
     init() {}
     
@@ -98,11 +113,22 @@ final class WhisperService {
             throw WhisperServiceError.emptyAudioData
         }
         
+        let audioDuration = Double(audioData.count) / sampleRate
+        
+        if isSilentAudio(audioData) {
+            return TranscriptionResult(
+                text: "",
+                language: config.language,
+                segments: [],
+                audioDuration: audioDuration,
+                processingTime: 0
+            )
+        }
+        
         let previousState = state
         state = .transcribing
         
         let startTime = Date()
-        let audioDuration = Double(audioData.count) / sampleRate
         
         do {
             let options = DecodingOptions(
@@ -122,6 +148,16 @@ final class WhisperService {
             state = previousState == .ready ? .ready : .idle
             
             let text = results.map { $0.text }.joined(separator: " ").trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            
+            if isHallucination(text) {
+                return TranscriptionResult(
+                    text: "",
+                    language: config.language,
+                    segments: [],
+                    audioDuration: audioDuration,
+                    processingTime: processingTime
+                )
+            }
             
             var segments: [TranscriptionSegment] = []
             var segmentId = 0
@@ -154,5 +190,20 @@ final class WhisperService {
         whisperKit = nil
         loadedModel = nil
         state = .idle
+    }
+    
+    private func isSilentAudio(_ audioData: [Float]) -> Bool {
+        guard !audioData.isEmpty else { return true }
+        let rms = sqrt(audioData.map { $0 * $0 }.reduce(0, +) / Float(audioData.count))
+        return rms < silenceThreshold
+    }
+    
+    private func isHallucination(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        for pattern in hallucinationPatterns {
+            if trimmed.contains(pattern) { return true }
+        }
+        return false
     }
 }

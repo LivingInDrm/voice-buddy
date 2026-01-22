@@ -1,7 +1,23 @@
 import SwiftUI
 
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var statusBarController: StatusBarController?
+    var appState: AppState?
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        statusBarController?.cleanup()
+        appState?.cleanup()
+    }
+}
+
 @main
 struct VoiceStudioApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var hasCheckedPermissions = false
     @Environment(\.openWindow) private var openWindow
@@ -11,6 +27,11 @@ struct VoiceStudioApp: App {
             MainWindowView(appState: appState)
                 .environment(appState)
                 .task {
+                    if appDelegate.appState == nil {
+                        appDelegate.appState = appState
+                        appDelegate.statusBarController = StatusBarController(appState: appState)
+                    }
+                    
                     guard !hasCheckedPermissions else { return }
                     hasCheckedPermissions = true
                     await checkPermissions()
@@ -22,23 +43,12 @@ struct VoiceStudioApp: App {
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "main")
                 }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                    appState.cleanup()
-                }
         }
         .defaultSize(width: 500, height: 500)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
-        
-        MenuBarExtra {
-            MenuBarView()
-                .environment(appState)
-        } label: {
-            MenuBarIcon(isRecording: appState.recordingState.isRecording)
-        }
-        .menuBarExtraStyle(.window)
         
         Settings {
             SettingsView()
